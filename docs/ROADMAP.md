@@ -26,7 +26,7 @@
 
 - [x] Injectable HTTP transport boundary.
 - [x] OpenAI-compatible non-streaming text provider.
-- [ ] True OpenAI-compatible SSE streaming.
+- [x] True OpenAI-compatible SSE streaming.
 - [ ] Anthropic provider.
 - [ ] Gemini provider.
 - [ ] Dedicated OpenAI provider where vendor-specific features justify it.

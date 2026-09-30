@@ -27,7 +27,17 @@ public struct OpenAICompatibleProvider: AIProvider {
     }
 
     public var capabilities: AICapabilities {
-        [.textGeneration, .remoteExecution, .requiresNetwork]
+        var capabilities: AICapabilities = [
+            .textGeneration,
+            .remoteExecution,
+            .requiresNetwork
+        ]
+
+        if transport is any AIHTTPStreamingTransport {
+            capabilities.insert(.streaming)
+        }
+
+        return capabilities
     }
 
     public func availability() async -> AIAvailability {
@@ -59,37 +69,10 @@ public struct OpenAICompatibleProvider: AIProvider {
             throw AIError.unsupportedCapability
         }
 
-        guard let endpointURL else {
-            throw AIError.invalidRequest("Invalid OpenAI-compatible endpoint URL")
-        }
-
-        let credential = try await requiredCredential()
-        let messages = try request.messages.map(OpenAICompatibleMessage.init)
-
-        let body = OpenAICompatibleChatRequest(
-            model: configuration.model,
-            messages: messages,
-            maxTokens: request.maxOutputTokens ?? configuration.defaultMaxOutputTokens,
-            temperature: request.temperature ?? configuration.defaultTemperature,
+        let urlRequest = try await makeURLRequest(
+            for: request,
             stream: false
         )
-
-        var urlRequest = URLRequest(url: endpointURL)
-        urlRequest.httpMethod = "POST"
-        urlRequest.timeoutInterval = configuration.timeout
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(
-            authorizationValue(credential: credential),
-            forHTTPHeaderField: configuration.authorizationHeaderName
-        )
-
-        do {
-            urlRequest.httpBody = try JSONEncoder().encode(body)
-        } catch {
-            throw AIError.invalidRequest(
-                "Failed to encode OpenAI-compatible request"
-            )
-        }
 
         let response: AIHTTPResponse
         do {
@@ -125,11 +108,187 @@ public struct OpenAICompatibleProvider: AIProvider {
             text: text,
             providerID: id,
             finishReason: finishReason(from: choice.finishReason),
-            usage: AIUsage(
-                inputTokens: decoded.usage?.promptTokens,
-                outputTokens: decoded.usage?.completionTokens
-            )
+            usage: usage(from: decoded.usage)
         )
+    }
+
+    public func stream(_ request: AIRequest) -> AIResponseStream {
+        guard
+            let streamingTransport =
+                transport as? any AIHTTPStreamingTransport
+        else {
+            return fallbackStream(request)
+        }
+
+        return AIResponseStream { continuation in
+            let task = Task {
+                do {
+                    guard capabilities.satisfies(
+                        request.requiredCapabilities
+                    ) else {
+                        throw AIError.unsupportedCapability
+                    }
+
+                    guard request.tools.isEmpty else {
+                        throw AIError.unsupportedCapability
+                    }
+
+                    let urlRequest = try await makeURLRequest(
+                        for: request,
+                        stream: true
+                    )
+
+                    let response: AIHTTPLineStreamResponse
+                    do {
+                        response = try await streamingTransport.lines(
+                            for: urlRequest
+                        )
+                    } catch is CancellationError {
+                        throw AIError.cancelled
+                    } catch {
+                        throw AIError.transportFailure(
+                            error.localizedDescription
+                        )
+                    }
+
+                    try validateHTTPStatus(
+                        response.statusCode,
+                        data: nil
+                    )
+
+                    var dataLines: [String] = []
+                    var accumulatedText = ""
+                    var finalFinishReason: AIFinishReason = .completed
+                    var finalUsage: AIUsage?
+                    var reachedDone = false
+
+                    func consumePayload(
+                        _ payload: String
+                    ) throws -> Bool {
+                        let normalized = payload.trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        )
+
+                        guard !normalized.isEmpty else {
+                            return false
+                        }
+
+                        if normalized == "[DONE]" {
+                            return true
+                        }
+
+                        guard let data = normalized.data(using: .utf8) else {
+                            throw AIError.decodingFailure(
+                                "OpenAI-compatible SSE payload was not UTF-8"
+                            )
+                        }
+
+                        let chunk: OpenAICompatibleChatChunk
+                        do {
+                            chunk = try JSONDecoder().decode(
+                                OpenAICompatibleChatChunk.self,
+                                from: data
+                            )
+                        } catch {
+                            throw AIError.decodingFailure(
+                                error.localizedDescription
+                            )
+                        }
+
+                        if let chunkUsage = usage(from: chunk.usage) {
+                            finalUsage = chunkUsage
+                            continuation.yield(.usage(chunkUsage))
+                        }
+
+                        if let choice = chunk.choices.first {
+                            if
+                                let delta = choice.delta.content,
+                                !delta.isEmpty
+                            {
+                                accumulatedText += delta
+                                continuation.yield(.textDelta(delta))
+                            }
+
+                            if let rawFinishReason = choice.finishReason {
+                                finalFinishReason = finishReason(
+                                    from: rawFinishReason
+                                )
+                            }
+                        }
+
+                        return false
+                    }
+
+                    for try await rawLine in response.lines {
+                        try Task.checkCancellation()
+
+                        if rawLine.isEmpty {
+                            guard !dataLines.isEmpty else {
+                                continue
+                            }
+
+                            let payload = dataLines.joined(separator: "\n")
+                            dataLines.removeAll(keepingCapacity: true)
+
+                            if try consumePayload(payload) {
+                                reachedDone = true
+                                break
+                            }
+
+                            continue
+                        }
+
+                        if rawLine.hasPrefix(":") {
+                            continue
+                        }
+
+                        guard rawLine.hasPrefix("data:") else {
+                            continue
+                        }
+
+                        var dataLine = String(rawLine.dropFirst(5))
+                        if dataLine.first == " " {
+                            dataLine.removeFirst()
+                        }
+                        dataLines.append(dataLine)
+                    }
+
+                    if !reachedDone && !dataLines.isEmpty {
+                        _ = try consumePayload(
+                            dataLines.joined(separator: "\n")
+                        )
+                    }
+
+                    let completedResponse = AIResponse(
+                        text: accumulatedText,
+                        providerID: id,
+                        finishReason: finalFinishReason,
+                        usage: finalUsage
+                    )
+
+                    continuation.yield(.completed(completedResponse))
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: AIError.cancelled)
+                } catch let error as AIError {
+                    continuation.finish(throwing: error)
+                } catch {
+                    if Task.isCancelled {
+                        continuation.finish(throwing: AIError.cancelled)
+                    } else {
+                        continuation.finish(
+                            throwing: AIError.transportFailure(
+                                error.localizedDescription
+                            )
+                        )
+                    }
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
     }
 
     private var credentialRequest: AICredentialRequest {
@@ -152,6 +311,56 @@ public struct OpenAICompatibleProvider: AIProvider {
         return URL(string: "\(base)/\(path)")
     }
 
+    private func makeURLRequest(
+        for request: AIRequest,
+        stream: Bool
+    ) async throws -> URLRequest {
+        guard let endpointURL else {
+            throw AIError.invalidRequest(
+                "Invalid OpenAI-compatible endpoint URL"
+            )
+        }
+
+        let credential = try await requiredCredential()
+        let messages = try request.messages.map(
+            OpenAICompatibleMessage.init
+        )
+
+        let body = OpenAICompatibleChatRequest(
+            model: configuration.model,
+            messages: messages,
+            maxTokens:
+                request.maxOutputTokens
+                ?? configuration.defaultMaxOutputTokens,
+            temperature:
+                request.temperature
+                ?? configuration.defaultTemperature,
+            stream: stream
+        )
+
+        var urlRequest = URLRequest(url: endpointURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = configuration.timeout
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        urlRequest.setValue(
+            authorizationValue(credential: credential),
+            forHTTPHeaderField: configuration.authorizationHeaderName
+        )
+
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            throw AIError.invalidRequest(
+                "Failed to encode OpenAI-compatible request"
+            )
+        }
+
+        return urlRequest
+    }
+
     private func requiredCredential() async throws -> String {
         let credential: String
         do {
@@ -160,7 +369,9 @@ public struct OpenAICompatibleProvider: AIProvider {
             ) else {
                 throw AIError.unavailable(.authenticationMissing)
             }
-            credential = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            credential = value.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
         } catch let error as AIError {
             throw error
         } catch is CancellationError {
@@ -191,13 +402,30 @@ public struct OpenAICompatibleProvider: AIProvider {
     private func validateHTTPResponse(
         _ response: AIHTTPResponse
     ) throws {
-        guard !(200...299).contains(response.statusCode) else {
+        try validateHTTPStatus(
+            response.statusCode,
+            data: response.data
+        )
+    }
+
+    private func validateHTTPStatus(
+        _ statusCode: Int,
+        data: Data?
+    ) throws {
+        guard !(200...299).contains(statusCode) else {
             return
         }
 
-        let message = errorMessage(from: response.data)
+        let message: String
+        if let data {
+            message = errorMessage(from: data)
+        } else {
+            message =
+                "OpenAI-compatible HTTP request failed with status " +
+                String(statusCode)
+        }
 
-        switch response.statusCode {
+        switch statusCode {
         case 401, 403:
             throw AIError.authenticationFailed
         case 408:
@@ -249,6 +477,56 @@ public struct OpenAICompatibleProvider: AIProvider {
             return .cancelled
         default:
             return .completed
+        }
+    }
+
+    private func usage(
+        from usage: OpenAICompatibleChatResponse.Usage?
+    ) -> AIUsage? {
+        guard let usage else {
+            return nil
+        }
+
+        return AIUsage(
+            inputTokens: usage.promptTokens,
+            outputTokens: usage.completionTokens
+        )
+    }
+
+    private func fallbackStream(
+        _ request: AIRequest
+    ) -> AIResponseStream {
+        AIResponseStream { continuation in
+            let task = Task {
+                do {
+                    let response = try await generate(request)
+
+                    if !response.text.isEmpty {
+                        continuation.yield(.textDelta(response.text))
+                    }
+
+                    for toolCall in response.toolCalls {
+                        continuation.yield(.toolCall(toolCall))
+                    }
+
+                    if let usage = response.usage {
+                        continuation.yield(.usage(usage))
+                    }
+
+                    continuation.yield(.completed(response))
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: AIError.cancelled)
+                } catch let error as AIError {
+                    continuation.finish(throwing: error)
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
         }
     }
 }

@@ -490,3 +490,166 @@ extension AICoreKitTests {
         }
     }
 }
+
+
+private actor RecordingStreamingHTTPTransport: AIHTTPStreamingTransport {
+    private let statusCode: Int
+    private let streamLines: [String]
+    private var capturedRequest: URLRequest?
+
+    init(
+        statusCode: Int = 200,
+        streamLines: [String]
+    ) {
+        self.statusCode = statusCode
+        self.streamLines = streamLines
+    }
+
+    func data(for request: URLRequest) async throws -> AIHTTPResponse {
+        capturedRequest = request
+        return AIHTTPResponse(
+            data: Data(),
+            statusCode: statusCode
+        )
+    }
+
+    func lines(
+        for request: URLRequest
+    ) async throws -> AIHTTPLineStreamResponse {
+        capturedRequest = request
+        let values = streamLines
+
+        let lines = AsyncThrowingStream<String, Error> {
+            continuation in
+
+            for value in values {
+                continuation.yield(value)
+            }
+            continuation.finish()
+        }
+
+        return AIHTTPLineStreamResponse(
+            statusCode: statusCode,
+            headers: ["Content-Type": "text/event-stream"],
+            lines: lines
+        )
+    }
+
+    func lastRequest() -> URLRequest? {
+        capturedRequest
+    }
+}
+
+extension AICoreKitTests {
+    func testOpenAICompatibleProviderStreamsSSE() async throws {
+        let transport = RecordingStreamingHTTPTransport(
+            streamLines: [
+                ": keepalive",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"hel\"},\"finish_reason\":null}]}",
+                "",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2}}",
+                "",
+                "data: [DONE]",
+                ""
+            ]
+        )
+
+        let provider = OpenAICompatibleProvider(
+            configuration: OpenAICompatibleProviderConfiguration(
+                providerID: "fixture.streaming",
+                displayName: "Streaming Fixture",
+                baseURL: URL(string: "https://example.com/v1")!,
+                model: "fixture-model"
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "test-token"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(.streaming)
+        )
+
+        var deltas: [String] = []
+        var observedUsage: AIUsage?
+        var completedResponse: AIResponse?
+
+        let stream = provider.stream(
+            AIRequest(
+                messages: [.user("hello")],
+                requiredCapabilities: [
+                    .textGeneration,
+                    .streaming
+                ]
+            )
+        )
+
+        for try await event in stream {
+            switch event {
+            case .textDelta(let delta):
+                deltas.append(delta)
+            case .usage(let usage):
+                observedUsage = usage
+            case .completed(let response):
+                completedResponse = response
+            case .toolCall:
+                XCTFail("Unexpected tool call")
+            }
+        }
+
+        XCTAssertEqual(deltas, ["hel", "lo"])
+        XCTAssertEqual(completedResponse?.text, "hello")
+        XCTAssertEqual(
+            completedResponse?.finishReason,
+            .completed
+        )
+        XCTAssertEqual(observedUsage?.inputTokens, 7)
+        XCTAssertEqual(observedUsage?.outputTokens, 2)
+        XCTAssertEqual(
+            completedResponse?.usage?.inputTokens,
+            7
+        )
+        XCTAssertEqual(
+            completedResponse?.usage?.outputTokens,
+            2
+        )
+
+        let capturedRequest = await transport.lastRequest()
+        let bodyData = try XCTUnwrap(capturedRequest?.httpBody)
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+        XCTAssertEqual(body["stream"] as? Bool, true)
+    }
+
+    func testOpenAICompatibleStreamingMapsRateLimit() async {
+        let transport = RecordingStreamingHTTPTransport(
+            statusCode: 429,
+            streamLines: []
+        )
+
+        let provider = OpenAICompatibleProvider(
+            configuration: OpenAICompatibleProviderConfiguration(
+                baseURL: URL(string: "https://example.com/v1")!,
+                model: "fixture-model"
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "test-token"
+            ),
+            transport: transport
+        )
+
+        do {
+            for try await _ in provider.stream(
+                AIRequest(messages: [.user("hello")])
+            ) {}
+            XCTFail("Expected rate limit")
+        } catch let error as AIError {
+            XCTAssertEqual(error, .rateLimited)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+}

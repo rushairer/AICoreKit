@@ -4,7 +4,7 @@ Cloud providers are optional AICoreKit products. The core package does not persi
 
 ## HTTP transport
 
-`AIHTTP` defines the injectable `AIHTTPTransport` boundary.
+`AIHTTP` defines injectable `AIHTTPTransport` and `AIHTTPStreamingTransport` boundaries.
 
 The default `URLSessionAIHTTPTransport` is suitable for direct client requests, while applications can inject their own transport for:
 
@@ -23,7 +23,7 @@ Do not put production service API keys in a public repository or hard-code them 
 
 ## OpenAI-compatible provider
 
-`AIProviderOpenAICompatible` implements the common non-streaming `POST /chat/completions` text-generation shape used by multiple services.
+`AIProviderOpenAICompatible` implements the common `POST /chat/completions` text-generation shape used by multiple services. When its injected transport conforms to `AIHTTPStreamingTransport`, the provider also advertises `.streaming` and consumes OpenAI-compatible SSE `data:` events through `AIProvider.stream(_:)`.
 
 Configuration owns endpoint/model metadata, not credentials:
 
@@ -42,10 +42,10 @@ let provider = OpenAICompatibleProvider(
 )
 ```
 
-The initial implementation deliberately advertises only:
+The provider always advertises:
 
 - text generation;
 - remote execution;
 - network requirement.
 
-Streaming, structured generation, and tool calling will be added only after AICoreKit provides normalized, testable implementations for those behaviors.
+It additionally advertises streaming only when the injected transport supports streaming. Structured generation and tool calling remain disabled until AICoreKit provides normalized, testable implementations for those behaviors.
