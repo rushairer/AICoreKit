@@ -1296,7 +1296,7 @@ extension AICoreKitTests {
         XCTAssertFalse(
             provider.capabilities.contains(.toolCalling)
         )
-        XCTAssertFalse(
+        XCTAssertTrue(
             provider.capabilities.contains(.structuredGeneration)
         )
 
