@@ -61,6 +61,25 @@ struct OpenAICompatibleChatResponse: Decodable, Sendable {
     }
 }
 
+struct OpenAICompatibleChatChunk: Decodable, Sendable {
+    let choices: [Choice]
+    let usage: OpenAICompatibleChatResponse.Usage?
+
+    struct Choice: Decodable, Sendable {
+        let delta: Delta
+        let finishReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case delta
+            case finishReason = "finish_reason"
+        }
+    }
+
+    struct Delta: Decodable, Sendable {
+        let content: String?
+    }
+}
+
 struct OpenAICompatibleErrorEnvelope: Decodable, Sendable {
     let error: APIError?
 
