@@ -18,8 +18,9 @@
 - [x] Add an isolated iOS/macOS 27 Core AI runtime Swift package.
 - [x] Add explicit model prepare / unload lifecycle hooks.
 - [x] Add a Qwen3-0.6B export and integration fixture without shipping model assets.
-- [ ] Package the runtime as a weak-linked framework in the compatibility lab.
-- [ ] Validate iOS 26 launch, iOS 27 inference, Release archive, memory, cancellation, and thermal behavior.
+- [x] Build and validate the iOS 27 runtime framework artifact on an Xcode 27 CI runner.
+- [ ] Add a lower-minimum host fixture and prove the runtime is weak-linked in its final Mach-O.
+- [ ] Validate lower-OS launch, iOS 27 inference, Release archive, memory, cancellation, and thermal behavior.
 
 ## 0.3 Cloud providers
 

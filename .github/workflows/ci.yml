@@ -32,5 +32,10 @@ jobs:
             -scheme AICoreKitCoreAIRuntime \
             -destination 'generic/platform=iOS' \
             -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/AICoreKitCoreAIRuntime" \
             CODE_SIGNING_ALLOWED=NO \
             build
+      - name: Verify Core AI runtime artifact
+        run: |
+          ./Scripts/verify-coreai-runtime-framework.sh \
+            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/AICoreKitCoreAIRuntime.framework"
