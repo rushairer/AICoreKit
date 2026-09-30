@@ -39,3 +39,7 @@ jobs:
         run: |
           ./Scripts/verify-coreai-runtime-framework.sh \
             "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/AICoreKitCoreAIRuntime.framework"
+      - name: Verify lower-minimum host weak link
+        run: |
+          ./Scripts/build-verify-coreai-host-fixture.sh \
+            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/AICoreKitCoreAIRuntime.framework"

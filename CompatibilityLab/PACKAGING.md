@@ -10,9 +10,13 @@ Host application
         |
         | imports AIProviderCoreAI only
         v
-WeakSymbolCoreAIBridge
+AICoreWeakBridgeShim
+  weak C symbol reference
         |
-        | dlsym C ABI
+        v
+WeakSymbolCoreAIBridge
+  availability probe + dlsym C ABI
+        |
         v
 AICoreKitCoreAIRuntime.framework
   minimum iOS 27
@@ -23,6 +27,14 @@ CoreAILM / Core AI
 ```
 
 The lower-minimum host must not import the `AICoreKitCoreAIRuntime` Swift module.
+
+## Why the C shim exists
+
+A pure `dlsym` implementation does not create a link-time reference to the runtime framework. When dead stripping of unused dynamic libraries is enabled, the final host binary can lose the weak framework load command entirely.
+
+`AICoreWeakBridgeShim` therefore carries one deliberately tiny weak import of `AICKCoreAIIsAvailable`. This preserves the weak framework relationship in the final Mach-O while keeping all higher-level Runtime Swift types out of the lower-minimum host.
+
+Generation and lifecycle operations still resolve through the stable C ABI.
 
 ## Runtime framework requirements
 
@@ -57,15 +69,25 @@ For an Xcode application target, the effective linker invocation must produce `L
 
 Do not treat the flag alone as proof. Release validation must inspect the final host Mach-O load commands.
 
+## Automated lower-minimum fixture
+
+`CompatibilityLab/HostFixture` is compiled directly against the iPhoneOS SDK with a lower deployment target and the same C shim used by the Swift package.
+
+`Scripts/build-verify-coreai-host-fixture.sh` verifies that the resulting host Mach-O contains:
+
+- the requested lower minimum OS;
+- `LC_LOAD_WEAK_DYLIB` for the iOS 27 runtime;
+- a weak external reference to `AICKCoreAIIsAvailable`.
+
+This checks the linker boundary independently from any product application.
+
 ## Release validation
 
-Before declaring the compatibility boundary production-ready, a host application build must prove:
+Before declaring the compatibility boundary production-ready, a real host application build must additionally prove:
 
-- host application minimum OS remains its intended lower target;
-- runtime framework minimum OS is iOS 27+;
-- the final host executable contains `LC_LOAD_WEAK_DYLIB`, not `LC_LOAD_DYLIB`, for the runtime;
-- runtime install name uses `@rpath`;
-- host launches successfully on the lower supported OS when the runtime cannot load;
-- the four C ABI symbols resolve and inference succeeds on iOS 27+.
+- the runtime framework is embedded and code signed;
+- the final app launches successfully on the lower supported OS when the runtime cannot load;
+- the four C ABI symbols resolve and inference succeeds on iOS 27+;
+- Release/archive behavior matches Debug compatibility behavior.
 
-ColorCamera previously demonstrated this topology. AICoreKit's Compatibility Lab is extracting those checks into product-neutral validation.
+ColorCamera previously demonstrated this topology. AICoreKit's Compatibility Lab extracts those checks into product-neutral validation.

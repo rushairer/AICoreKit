@@ -20,7 +20,17 @@ let package = Package(
         .target(name: "AIOrchestration", dependencies: ["AICore"]),
         .target(name: "AITools", dependencies: ["AICore"]),
         .target(name: "AIProviderApple", dependencies: ["AICore"]),
-        .target(name: "AIProviderCoreAI", dependencies: ["AICore"]),
+        .target(
+            name: "AICoreWeakBridgeShim",
+            publicHeadersPath: "include"
+        ),
+        .target(
+            name: "AIProviderCoreAI",
+            dependencies: [
+                "AICore",
+                "AICoreWeakBridgeShim"
+            ]
+        ),
         .target(
             name: "AICoreKit",
             dependencies: [
