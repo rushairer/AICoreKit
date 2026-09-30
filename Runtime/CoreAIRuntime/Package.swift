@@ -17,7 +17,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/apple/coreai-models",
-            branch: "main"
+            revision: "3efa838ebf1a1e816ef4c17eb5022fe22cda2cb9"
         )
     ],
     targets: [
