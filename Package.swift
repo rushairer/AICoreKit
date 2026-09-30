@@ -9,15 +9,18 @@ let package = Package(
     ],
     products: [
         .library(name: "AICore", targets: ["AICore"]),
+        .library(name: "AIHTTP", targets: ["AIHTTP"]),
         .library(name: "AIOrchestration", targets: ["AIOrchestration"]),
         .library(name: "AITools", targets: ["AITools"]),
         .library(name: "AIProviderApple", targets: ["AIProviderApple"]),
         .library(name: "AIProviderCoreAI", targets: ["AIProviderCoreAI"]),
         .library(name: "AIProviderCoreAIWeakLink", targets: ["AIProviderCoreAIWeakLink"]),
+        .library(name: "AIProviderOpenAICompatible", targets: ["AIProviderOpenAICompatible"]),
         .library(name: "AICoreKit", targets: ["AICoreKit"])
     ],
     targets: [
         .target(name: "AICore"),
+        .target(name: "AIHTTP"),
         .target(name: "AIOrchestration", dependencies: ["AICore"]),
         .target(name: "AITools", dependencies: ["AICore"]),
         .target(name: "AIProviderApple", dependencies: ["AICore"]),
@@ -34,6 +37,13 @@ let package = Package(
             ]
         ),
         .target(
+            name: "AIProviderOpenAICompatible",
+            dependencies: [
+                "AICore",
+                "AIHTTP"
+            ]
+        ),
+        .target(
             name: "AICoreKit",
             dependencies: [
                 "AICore",
@@ -47,10 +57,12 @@ let package = Package(
             name: "AICoreKitTests",
             dependencies: [
                 "AICore",
+                "AIHTTP",
                 "AIOrchestration",
                 "AITools",
                 "AIProviderApple",
-                "AIProviderCoreAI"
+                "AIProviderCoreAI",
+                "AIProviderOpenAICompatible"
             ]
         )
     ]

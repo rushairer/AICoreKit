@@ -24,11 +24,13 @@
 
 ## 0.3 Cloud providers
 
-- [ ] OpenAI-compatible provider.
+- [x] Injectable HTTP transport boundary.
+- [x] OpenAI-compatible non-streaming text provider.
+- [ ] True OpenAI-compatible SSE streaming.
 - [ ] Anthropic provider.
 - [ ] Gemini provider.
 - [ ] Dedicated OpenAI provider where vendor-specific features justify it.
-- [ ] Injectable HTTP transport and credential sources.
+- [ ] Gateway-oriented credential examples and retry/observability hooks.
 
 ## 0.4 Structured generation and tools
 

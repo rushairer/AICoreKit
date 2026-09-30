@@ -257,3 +257,236 @@ extension AICoreKitTests {
         try await provider.releaseResources()
     }
 }
+
+
+import AIHTTP
+import AIProviderOpenAICompatible
+
+private struct TestCredentialProvider: AICredentialProviding {
+    let value: String?
+
+    func credential(
+        for request: AICredentialRequest
+    ) async throws -> String? {
+        value
+    }
+}
+
+private actor RecordingHTTPTransport: AIHTTPTransport {
+    private let response: AIHTTPResponse
+    private var capturedRequest: URLRequest?
+
+    init(response: AIHTTPResponse) {
+        self.response = response
+    }
+
+    func data(for request: URLRequest) async throws -> AIHTTPResponse {
+        capturedRequest = request
+        return response
+    }
+
+    func lastRequest() -> URLRequest? {
+        capturedRequest
+    }
+}
+
+extension AICoreKitTests {
+    func testOpenAICompatibleProviderGeneratesTextAndUsage() async throws {
+        let responseData = """
+        {
+          "choices": [
+            {
+              "message": {"content": "hello from cloud"},
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 7,
+            "completion_tokens": 3
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = OpenAICompatibleProvider(
+            configuration: OpenAICompatibleProviderConfiguration(
+                providerID: "fixture.openai-compatible",
+                displayName: "Fixture",
+                baseURL: URL(string: "https://example.com/v1")!,
+                model: "fixture-model",
+                defaultMaxOutputTokens: 64,
+                defaultTemperature: 0.25
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "test-token"
+            ),
+            transport: transport
+        )
+
+        let response = try await provider.generate(
+            AIRequest(messages: [.user("hello")])
+        )
+
+        XCTAssertEqual(response.text, "hello from cloud")
+        XCTAssertEqual(response.providerID, "fixture.openai-compatible")
+        XCTAssertEqual(response.usage?.inputTokens, 7)
+        XCTAssertEqual(response.usage?.outputTokens, 3)
+
+        let capturedRequest = await transport.lastRequest()
+        XCTAssertEqual(
+            capturedRequest?.url?.absoluteString,
+            "https://example.com/v1/chat/completions"
+        )
+        XCTAssertEqual(
+            capturedRequest?.value(
+                forHTTPHeaderField: "Authorization"
+            ),
+            "Bearer test-token"
+        )
+
+        let bodyData = try XCTUnwrap(capturedRequest?.httpBody)
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+        XCTAssertEqual(body["model"] as? String, "fixture-model")
+        XCTAssertEqual(body["stream"] as? Bool, false)
+        XCTAssertEqual(body["max_tokens"] as? Int, 64)
+    }
+
+    func testOpenAICompatibleProviderDoesNotOverstateCapabilities() {
+        let provider = OpenAICompatibleProvider(
+            configuration: OpenAICompatibleProviderConfiguration(
+                baseURL: URL(string: "https://example.com/v1")!,
+                model: "fixture-model"
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "test-token"
+            ),
+            transport: RecordingHTTPTransport(
+                response: AIHTTPResponse(
+                    data: Data(),
+                    statusCode: 200
+                )
+            )
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(.textGeneration)
+        )
+        XCTAssertTrue(
+            provider.capabilities.contains(.remoteExecution)
+        )
+        XCTAssertTrue(
+            provider.capabilities.contains(.requiresNetwork)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.streaming)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.structuredGeneration)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.toolCalling)
+        )
+    }
+
+    func testOpenAICompatibleProviderReportsMissingCredential() async {
+        let provider = OpenAICompatibleProvider(
+            configuration: OpenAICompatibleProviderConfiguration(
+                baseURL: URL(string: "https://example.com/v1")!,
+                model: "fixture-model"
+            ),
+            credentialProvider: TestCredentialProvider(value: nil),
+            transport: RecordingHTTPTransport(
+                response: AIHTTPResponse(
+                    data: Data(),
+                    statusCode: 200
+                )
+            )
+        )
+
+        let availability = await provider.availability()
+        XCTAssertEqual(
+            availability,
+            .unavailable(.authenticationMissing)
+        )
+    }
+
+    func testOpenAICompatibleProviderMapsAuthenticationFailure() async {
+        let errorData = """
+        {"error":{"message":"invalid credential"}}
+        """.data(using: .utf8)!
+
+        let provider = OpenAICompatibleProvider(
+            configuration: OpenAICompatibleProviderConfiguration(
+                baseURL: URL(string: "https://example.com/v1")!,
+                model: "fixture-model"
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "bad-token"
+            ),
+            transport: RecordingHTTPTransport(
+                response: AIHTTPResponse(
+                    data: errorData,
+                    statusCode: 401
+                )
+            )
+        )
+
+        do {
+            _ = try await provider.generate(
+                AIRequest(messages: [.user("hello")])
+            )
+            XCTFail("Expected authentication failure")
+        } catch let error as AIError {
+            XCTAssertEqual(error, .authenticationFailed)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testOpenAICompatibleProviderRejectsToolsUntilNormalized() async {
+        let provider = OpenAICompatibleProvider(
+            configuration: OpenAICompatibleProviderConfiguration(
+                baseURL: URL(string: "https://example.com/v1")!,
+                model: "fixture-model"
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "test-token"
+            ),
+            transport: RecordingHTTPTransport(
+                response: AIHTTPResponse(
+                    data: Data(),
+                    statusCode: 200
+                )
+            )
+        )
+
+        do {
+            _ = try await provider.generate(
+                AIRequest(
+                    messages: [.user("hello")],
+                    tools: [
+                        AIToolDefinition(
+                            name: "fixture",
+                            description: "fixture",
+                            inputSchemaJSON: "{}"
+                        )
+                    ]
+                )
+            )
+            XCTFail("Expected unsupported capability")
+        } catch let error as AIError {
+            XCTAssertEqual(error, .unsupportedCapability)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+}

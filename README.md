@@ -18,11 +18,11 @@ It is designed around capabilities rather than vendors, so product code can use 
 ## Initial modules
 
 - `AICore` — provider contracts, requests, responses, capabilities, availability, errors, credentials, and stream events.
-- `AIOrchestration` — provider registry, routing, execution preference, and fallback.
+- `AIHTTP` — injectable HTTP transport for cloud providers.\n- `AIOrchestration` — provider registry, routing, execution preference, and fallback.
 - `AITools` — tool definitions, registry, side-effect classification, and execution policy.
 - `AIProviderApple` — Apple Foundation Models provider, gated by runtime availability.
 - `AIProviderCoreAI` — host-safe local Core AI provider and dynamic C ABI bridge.
-- `AIProviderCoreAIWeakLink` — optional weak-link support for apps embedding the iOS/macOS 27 Core AI runtime.
+- `AIProviderCoreAIWeakLink` — optional weak-link support for apps embedding the iOS/macOS 27 Core AI runtime.\n- `AIProviderOpenAICompatible` — optional non-streaming OpenAI-compatible chat-completions provider.
 - `AICoreKit` — convenience umbrella module.
 
 Future provider modules will include OpenAI-compatible APIs, OpenAI, Anthropic, and Gemini.
@@ -83,3 +83,10 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+
+## Cloud providers
+
+Cloud integrations are optional package products. The first cloud adapter, `AIProviderOpenAICompatible`, uses injected credentials and an injected `AIHTTPTransport`; it does not persist API keys or force cloud networking into the `AICoreKit` umbrella product.
+
+See [docs/CLOUD_PROVIDERS.md](docs/CLOUD_PROVIDERS.md).
