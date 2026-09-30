@@ -72,3 +72,27 @@ The provider:
 - advertises streaming only when the injected transport supports `AIHTTPStreamingTransport`;
 - leaves temperature unset by default, so applications opt in explicitly when the selected model supports it;
 - does not yet advertise tool calling or structured generation.
+
+
+## Gemini provider
+
+`AIProviderGemini` implements the Gemini Generate Content API for text generation and SSE streaming.
+
+```swift
+let provider = GeminiProvider(
+    configuration: GeminiProviderConfiguration(
+        model: "gemini-3.8-flash"
+    ),
+    credentialProvider: credentials
+)
+```
+
+The provider:
+
+- authenticates with the `x-goog-api-key` header;
+- maps system messages to `systemInstruction`;
+- maps assistant history to Gemini's `model` role;
+- uses `generateContent` for non-streaming generation;
+- uses `streamGenerateContent?alt=sse` for streaming;
+- leaves temperature unset by default;
+- exposes only normalized text and streaming capabilities for now, even though Gemini can support additional media and tool features.

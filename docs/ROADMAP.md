@@ -28,7 +28,7 @@
 - [x] OpenAI-compatible non-streaming text provider.
 - [x] True OpenAI-compatible SSE streaming.
 - [x] Anthropic provider.
-- [ ] Gemini provider.
+- [x] Gemini provider.
 - [ ] Dedicated OpenAI provider where vendor-specific features justify it.
 - [ ] Gateway-oriented credential examples and retry/observability hooks.
 

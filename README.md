@@ -24,9 +24,10 @@ It is designed around capabilities rather than vendors, so product code can use 
 - `AIProviderCoreAI` — host-safe local Core AI provider and dynamic C ABI bridge.
 - `AIProviderCoreAIWeakLink` — optional weak-link support for apps embedding the iOS/macOS 27 Core AI runtime.\n- `AIProviderOpenAICompatible` — optional OpenAI-compatible chat-completions provider with non-streaming and SSE streaming text generation.
 - `AIProviderAnthropic` — optional Anthropic Messages API provider with non-streaming and SSE streaming text generation.
+- `AIProviderGemini` — optional Gemini Generate Content provider with non-streaming and SSE streaming text generation.
 - `AICoreKit` — convenience umbrella module.
 
-Future provider work includes Gemini and dedicated OpenAI adapters where vendor-specific behavior justifies them.
+Future provider work includes a dedicated OpenAI adapter where vendor-specific behavior justifies it.
 
 ## Design principle
 

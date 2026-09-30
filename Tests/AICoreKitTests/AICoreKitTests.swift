@@ -902,3 +902,245 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+import AIProviderGemini
+
+extension AICoreKitTests {
+    func testGeminiProviderGeneratesTextAndHeaders() async throws {
+        let responseData = """
+        {
+          "candidates": [
+            {
+              "content": {
+                "role": "model",
+                "parts": [
+                  {"text": "hello from Gemini"}
+                ]
+              },
+              "finishReason": "STOP"
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 9,
+            "candidatesTokenCount": 4,
+            "totalTokenCount": 13
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = GeminiProvider(
+            configuration: GeminiProviderConfiguration(
+                model: "fixture-gemini",
+                baseURL: URL(
+                    string: "https://gemini.example"
+                )!,
+                defaultMaxOutputTokens: 256
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "gemini-key"
+            ),
+            transport: transport
+        )
+
+        let response = try await provider.generate(
+            AIRequest(
+                messages: [
+                    .system("Be concise."),
+                    .user("hello")
+                ]
+            )
+        )
+
+        XCTAssertEqual(response.text, "hello from Gemini")
+        XCTAssertEqual(response.providerID, .gemini)
+        XCTAssertEqual(response.usage?.inputTokens, 9)
+        XCTAssertEqual(response.usage?.outputTokens, 4)
+
+        let capturedRequest = await transport.lastRequest()
+
+        XCTAssertEqual(
+            capturedRequest?.url?.absoluteString,
+            "https://gemini.example/v1beta/models/fixture-gemini:generateContent"
+        )
+        XCTAssertEqual(
+            capturedRequest?.value(
+                forHTTPHeaderField: "x-goog-api-key"
+            ),
+            "gemini-key"
+        )
+
+        let bodyData = try XCTUnwrap(
+            capturedRequest?.httpBody
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+
+        let generationConfig = try XCTUnwrap(
+            body["generationConfig"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            generationConfig["maxOutputTokens"] as? Int,
+            256
+        )
+        XCTAssertNil(generationConfig["temperature"])
+
+        let systemInstruction = try XCTUnwrap(
+            body["systemInstruction"] as? [String: Any]
+        )
+        let systemParts = try XCTUnwrap(
+            systemInstruction["parts"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            systemParts.first?["text"] as? String,
+            "Be concise."
+        )
+
+        let contents = try XCTUnwrap(
+            body["contents"] as? [[String: Any]]
+        )
+        XCTAssertEqual(contents.count, 1)
+        XCTAssertEqual(
+            contents.first?["role"] as? String,
+            "user"
+        )
+    }
+
+    func testGeminiProviderStreamsGenerateContentSSE() async throws {
+        let transport = RecordingStreamingHTTPTransport(
+            streamLines: [
+                "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"hel\"}]}}],\"usageMetadata\":{\"promptTokenCount\":6,\"candidatesTokenCount\":1}}",
+                "",
+                "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"lo\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":6,\"candidatesTokenCount\":2}}",
+                ""
+            ]
+        )
+
+        let provider = GeminiProvider(
+            configuration: GeminiProviderConfiguration(
+                model: "fixture-gemini",
+                baseURL: URL(
+                    string: "https://gemini.example"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "gemini-key"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(.streaming)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.toolCalling)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.imageInput)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.audioInput)
+        )
+
+        var deltas: [String] = []
+        var observedUsage: AIUsage?
+        var completedResponse: AIResponse?
+
+        for try await event in provider.stream(
+            AIRequest(
+                messages: [.user("hello")],
+                requiredCapabilities: [
+                    .textGeneration,
+                    .streaming
+                ]
+            )
+        ) {
+            switch event {
+            case .textDelta(let delta):
+                deltas.append(delta)
+
+            case .usage(let usage):
+                observedUsage = usage
+
+            case .completed(let response):
+                completedResponse = response
+
+            case .toolCall:
+                XCTFail("Unexpected tool call")
+            }
+        }
+
+        XCTAssertEqual(deltas, ["hel", "lo"])
+        XCTAssertEqual(
+            completedResponse?.text,
+            "hello"
+        )
+        XCTAssertEqual(
+            completedResponse?.finishReason,
+            .completed
+        )
+        XCTAssertEqual(
+            observedUsage?.inputTokens,
+            6
+        )
+        XCTAssertEqual(
+            observedUsage?.outputTokens,
+            2
+        )
+
+        let capturedRequest = await transport.lastRequest()
+        XCTAssertEqual(
+            capturedRequest?.url?.absoluteString,
+            "https://gemini.example/v1beta/models/fixture-gemini:streamGenerateContent?alt=sse"
+        )
+    }
+
+    func testGeminiProviderMapsBlockedPromptToBlockedResponse() async throws {
+        let responseData = """
+        {
+          "promptFeedback": {
+            "blockReason": "SAFETY"
+          },
+          "usageMetadata": {
+            "promptTokenCount": 3,
+            "totalTokenCount": 3
+          }
+        }
+        """.data(using: .utf8)!
+
+        let provider = GeminiProvider(
+            configuration: GeminiProviderConfiguration(
+                model: "fixture-gemini",
+                baseURL: URL(
+                    string: "https://gemini.example"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "gemini-key"
+            ),
+            transport: RecordingHTTPTransport(
+                response: AIHTTPResponse(
+                    data: responseData,
+                    statusCode: 200
+                )
+            )
+        )
+
+        let response = try await provider.generate(
+            AIRequest(messages: [.user("hello")])
+        )
+
+        XCTAssertEqual(response.text, "")
+        XCTAssertEqual(response.finishReason, .blocked)
+        XCTAssertEqual(response.usage?.inputTokens, 3)
+    }
+}
