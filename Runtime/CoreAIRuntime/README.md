@@ -33,3 +33,11 @@ The runtime should be built as an iOS 27+ dynamic framework and embedded in the 
 Model assets are not stored in this repository. Export a supported model such as Qwen3-0.6B for the target platform using Apple's `coreai-models` tools, then provide the exported resource directory through `CoreAIModelResourceProviding`.
 
 The public repository must not redistribute model assets unless their license and size policy explicitly permit it.
+
+
+## Upstream pinning
+
+The runtime currently pins Apple's `coreai-models` repository to revision
+`3efa838ebf1a1e816ef4c17eb5022fe22cda2cb9`.
+
+Update that revision deliberately and let the dedicated runtime CI job validate the integration before merging.
