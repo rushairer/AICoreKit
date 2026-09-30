@@ -679,3 +679,226 @@ extension AICoreKitTests {
         XCTAssertEqual(tail?.id, "event-1")
     }
 }
+
+
+import AIProviderAnthropic
+
+extension AICoreKitTests {
+    func testAnthropicProviderGeneratesTextAndHeaders() async throws {
+        let responseData = """
+        {
+          "content": [
+            {"type": "text", "text": "hello from Claude"}
+          ],
+          "stop_reason": "end_turn",
+          "usage": {
+            "input_tokens": 8,
+            "output_tokens": 4
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(
+                model: "fixture-claude",
+                baseURL: URL(
+                    string: "https://api.anthropic.example/v1"
+                )!,
+                defaultMaxOutputTokens: 256
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "anthropic-key"
+            ),
+            transport: transport
+        )
+
+        let response = try await provider.generate(
+            AIRequest(
+                messages: [
+                    .system("Be concise."),
+                    .user("hello")
+                ]
+            )
+        )
+
+        XCTAssertEqual(response.text, "hello from Claude")
+        XCTAssertEqual(response.providerID, .anthropic)
+        XCTAssertEqual(response.usage?.inputTokens, 8)
+        XCTAssertEqual(response.usage?.outputTokens, 4)
+
+        let capturedRequest = await transport.lastRequest()
+
+        XCTAssertEqual(
+            capturedRequest?.url?.absoluteString,
+            "https://api.anthropic.example/v1/messages"
+        )
+        XCTAssertEqual(
+            capturedRequest?.value(
+                forHTTPHeaderField: "x-api-key"
+            ),
+            "anthropic-key"
+        )
+        XCTAssertEqual(
+            capturedRequest?.value(
+                forHTTPHeaderField: "anthropic-version"
+            ),
+            "2023-06-01"
+        )
+
+        let bodyData = try XCTUnwrap(
+            capturedRequest?.httpBody
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            body["model"] as? String,
+            "fixture-claude"
+        )
+        XCTAssertEqual(
+            body["max_tokens"] as? Int,
+            256
+        )
+        XCTAssertEqual(
+            body["stream"] as? Bool,
+            false
+        )
+        XCTAssertEqual(
+            body["system"] as? String,
+            "Be concise."
+        )
+        XCTAssertNil(body["temperature"])
+
+        let messages = try XCTUnwrap(
+            body["messages"] as? [[String: Any]]
+        )
+        XCTAssertEqual(messages.count, 1)
+        XCTAssertEqual(
+            messages.first?["role"] as? String,
+            "user"
+        )
+        XCTAssertEqual(
+            messages.first?["content"] as? String,
+            "hello"
+        )
+    }
+
+    func testAnthropicProviderStreamsMessagesAPIEvents() async throws {
+        let transport = RecordingStreamingHTTPTransport(
+            streamLines: [
+                "event: message_start",
+                "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":5,\"output_tokens\":0}}}",
+                "",
+                "event: content_block_delta",
+                "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"hel\"}}",
+                "",
+                "event: content_block_delta",
+                "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"lo\"}}",
+                "",
+                "event: message_delta",
+                "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":2}}",
+                "",
+                "event: message_stop",
+                "data: {\"type\":\"message_stop\"}",
+                ""
+            ]
+        )
+
+        let provider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(
+                model: "fixture-claude",
+                baseURL: URL(
+                    string: "https://api.anthropic.example/v1"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "anthropic-key"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(.streaming)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.toolCalling)
+        )
+
+        var deltas: [String] = []
+        var observedUsage: AIUsage?
+        var completedResponse: AIResponse?
+
+        for try await event in provider.stream(
+            AIRequest(
+                messages: [.user("hello")],
+                requiredCapabilities: [
+                    .textGeneration,
+                    .streaming
+                ]
+            )
+        ) {
+            switch event {
+            case .textDelta(let delta):
+                deltas.append(delta)
+
+            case .usage(let usage):
+                observedUsage = usage
+
+            case .completed(let response):
+                completedResponse = response
+
+            case .toolCall:
+                XCTFail("Unexpected tool call")
+            }
+        }
+
+        XCTAssertEqual(deltas, ["hel", "lo"])
+        XCTAssertEqual(
+            completedResponse?.text,
+            "hello"
+        )
+        XCTAssertEqual(
+            completedResponse?.finishReason,
+            .completed
+        )
+        XCTAssertEqual(
+            observedUsage?.inputTokens,
+            5
+        )
+        XCTAssertEqual(
+            observedUsage?.outputTokens,
+            2
+        )
+        XCTAssertEqual(
+            completedResponse?.usage?.inputTokens,
+            5
+        )
+        XCTAssertEqual(
+            completedResponse?.usage?.outputTokens,
+            2
+        )
+
+        let capturedRequest = await transport.lastRequest()
+        let bodyData = try XCTUnwrap(
+            capturedRequest?.httpBody
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            body["stream"] as? Bool,
+            true
+        )
+    }
+}

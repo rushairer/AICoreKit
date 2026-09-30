@@ -49,3 +49,26 @@ The provider always advertises:
 - network requirement.
 
 It additionally advertises streaming only when the injected transport supports streaming. Structured generation and tool calling remain disabled until AICoreKit provides normalized, testable implementations for those behaviors.
+
+
+## Anthropic provider
+
+`AIProviderAnthropic` implements Anthropic's Messages API for text generation and SSE streaming. The model identifier is supplied by the application so AICoreKit does not hard-code a model lifecycle decision.
+
+```swift
+let provider = AnthropicProvider(
+    configuration: AnthropicProviderConfiguration(
+        model: "claude-sonnet-5"
+    ),
+    credentialProvider: credentials
+)
+```
+
+The provider:
+
+- sends API keys through `x-api-key`;
+- sends the configured `anthropic-version` header;
+- maps AICoreKit system messages to the top-level Messages API `system` field;
+- advertises streaming only when the injected transport supports `AIHTTPStreamingTransport`;
+- leaves temperature unset by default, so applications opt in explicitly when the selected model supports it;
+- does not yet advertise tool calling or structured generation.

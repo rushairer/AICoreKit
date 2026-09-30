@@ -16,6 +16,7 @@ let package = Package(
         .library(name: "AIProviderCoreAI", targets: ["AIProviderCoreAI"]),
         .library(name: "AIProviderCoreAIWeakLink", targets: ["AIProviderCoreAIWeakLink"]),
         .library(name: "AIProviderOpenAICompatible", targets: ["AIProviderOpenAICompatible"]),
+        .library(name: "AIProviderAnthropic", targets: ["AIProviderAnthropic"]),
         .library(name: "AICoreKit", targets: ["AICoreKit"])
     ],
     targets: [
@@ -44,6 +45,13 @@ let package = Package(
             ]
         ),
         .target(
+            name: "AIProviderAnthropic",
+            dependencies: [
+                "AICore",
+                "AIHTTP"
+            ]
+        ),
+        .target(
             name: "AICoreKit",
             dependencies: [
                 "AICore",
@@ -62,7 +70,8 @@ let package = Package(
                 "AITools",
                 "AIProviderApple",
                 "AIProviderCoreAI",
-                "AIProviderOpenAICompatible"
+                "AIProviderOpenAICompatible",
+                "AIProviderAnthropic"
             ]
         )
     ]
