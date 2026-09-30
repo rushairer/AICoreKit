@@ -21,9 +21,10 @@ It is designed around capabilities rather than vendors, so product code can use 
 - `AIOrchestration` — provider registry, routing, execution preference, and fallback.
 - `AITools` — tool definitions, registry, side-effect classification, and execution policy.
 - `AIProviderApple` — Apple Foundation Models provider, gated by runtime availability.
+- `AIProviderCoreAI` — host-safe local Core AI provider plus weak-symbol bridge.
 - `AICoreKit` — convenience umbrella module.
 
-Future provider modules will include Core AI local models, OpenAI-compatible APIs, OpenAI, Anthropic, and Gemini.
+Future provider modules will include OpenAI-compatible APIs, OpenAI, Anthropic, and Gemini.
 
 ## Design principle
 
@@ -47,11 +48,13 @@ AICoreKit does **not** contain product-specific prompts or domain types. For exa
 
 Provider credentials are injected through protocols. AICoreKit does not persist API keys in `UserDefaults` or ship application secrets.
 
-## Apple local AI
+## Core AI local models
 
-`AIProviderApple` uses Apple Foundation Models when the framework is available and the system model is ready. Availability is checked at runtime.
+The root package remains usable by lower-minimum hosts. `AIProviderCoreAI` communicates through a stable C ABI resolved by `WeakSymbolCoreAIBridge`.
 
-A separate Core AI local-model provider is planned for runtimes that require iOS 27+. The iOS 26 host / iOS 27 framework compatibility boundary proven in ColorCamera is documented under `CompatibilityLab/` before it is generalized into the package.
+The higher-minimum implementation lives in the nested `Runtime/CoreAIRuntime` package, which requires iOS/macOS 27 and Apple's `CoreAILM` runtime. Model assets are supplied by the host and are not bundled in AICoreKit.
+
+See `CompatibilityLab/CORE_AI_ABI.md` for the boundary contract.
 
 ## Installation
 

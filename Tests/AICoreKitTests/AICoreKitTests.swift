@@ -188,3 +188,22 @@ final class AICoreKitTests: XCTestCase {
         }
     }
 }
+
+
+extension AICoreKitTests {
+    func testWeakSymbolBridgeIsUnavailableWithoutRuntimeImage() async {
+        let bridge = WeakSymbolCoreAIBridge(
+            availabilitySymbol: "AICKDefinitelyMissingAvailability",
+            generateSymbol: "AICKDefinitelyMissingGenerate"
+        )
+
+        let availability = await bridge.availability()
+        XCTAssertNotEqual(availability, .available)
+
+        let invocation = await bridge.generate(
+            requestJSON: "{}",
+            modelPath: "/missing"
+        )
+        XCTAssertEqual(invocation.status, .unavailable)
+    }
+}

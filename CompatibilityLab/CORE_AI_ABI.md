@@ -1,8 +1,8 @@
 # Core AI weak ABI contract
 
-This is the proposed product-neutral C ABI between an iOS 26 host and an iOS 27-only Core AI runtime framework.
+This is the product-neutral C ABI between a lower-minimum host and the iOS/macOS 27-only Core AI runtime.
 
-The host must not import `CoreAILanguageModels` or the higher-minimum Swift framework module.
+The host must not import `CoreAILanguageModels` or the higher-minimum Swift runtime module.
 
 ## Symbols
 
@@ -16,6 +16,8 @@ void AICKCoreAIGenerate(
     AICKCoreAIGenerateCompletion completion
 );
 ```
+
+The root package's `WeakSymbolCoreAIBridge` resolves these symbols dynamically with `dlsym`. The host is still responsible for embedding the runtime framework with a weak load command so the higher-minimum image is optional on older OS releases.
 
 ## Request JSON
 
@@ -33,6 +35,8 @@ The host sends vendor-neutral chat data:
 }
 ```
 
+The runtime must copy `requestJSON` and `modelPath` before the exported C function returns. The host owns those C-string buffers only for the duration of the call.
+
 ## Response JSON
 
 The runtime responds with:
@@ -46,7 +50,9 @@ The runtime responds with:
 }
 ```
 
-The ABI intentionally knows nothing about palettes, practice sessions, astrology, or other host product domains.
+The callback's JSON C string is valid only during the callback. The host copies it immediately.
+
+The ABI intentionally knows nothing about palettes, practice sessions, astrology, or other product domains.
 
 ## Status codes
 
@@ -60,5 +66,3 @@ The ABI intentionally knows nothing about palettes, practice sessions, astrology
 | 5 | cancelled |
 | 6 | runtime unavailable |
 | -1 | unknown |
-
-The production iOS 27 framework implementation will map Core AI runtime failures to this contract.
