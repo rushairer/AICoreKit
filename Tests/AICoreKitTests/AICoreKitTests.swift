@@ -121,8 +121,9 @@ final class AICoreKitTests: XCTestCase {
             resourceProvider: StaticCoreAIModelResourceProvider(resource: nil)
         )
 
+        let availability = await provider.availability()
         XCTAssertEqual(
-            await provider.availability(),
+            availability,
             .unavailable(.modelMissing)
         )
     }
