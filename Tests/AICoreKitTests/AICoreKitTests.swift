@@ -653,3 +653,29 @@ extension AICoreKitTests {
         }
     }
 }
+
+
+extension AICoreKitTests {
+    func testServerSentEventDecoderHandlesMultilineDataAndIDs() {
+        var decoder = AIServerSentEventDecoder()
+
+        XCTAssertNil(decoder.consume(": keepalive"))
+        XCTAssertNil(decoder.consume("id: event-1"))
+        XCTAssertNil(decoder.consume("event: message"))
+        XCTAssertNil(decoder.consume("data: first"))
+        XCTAssertNil(decoder.consume("data: second"))
+
+        let event = decoder.consume("")
+
+        XCTAssertEqual(event?.event, "message")
+        XCTAssertEqual(event?.data, "first\nsecond")
+        XCTAssertEqual(event?.id, "event-1")
+
+        XCTAssertNil(decoder.consume("data: tail"))
+        let tail = decoder.finish()
+
+        XCTAssertEqual(tail?.event, nil)
+        XCTAssertEqual(tail?.data, "tail")
+        XCTAssertEqual(tail?.id, "event-1")
+    }
+}

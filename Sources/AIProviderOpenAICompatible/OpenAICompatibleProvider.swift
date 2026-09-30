@@ -156,7 +156,7 @@ public struct OpenAICompatibleProvider: AIProvider {
                         data: nil
                     )
 
-                    var dataLines: [String] = []
+                    var sseDecoder = AIServerSentEventDecoder()
                     var accumulatedText = ""
                     var finalFinishReason: AIFinishReason = .completed
                     var finalUsage: AIUsage?
@@ -222,41 +222,23 @@ public struct OpenAICompatibleProvider: AIProvider {
                     for try await rawLine in response.lines {
                         try Task.checkCancellation()
 
-                        if rawLine.isEmpty {
-                            guard !dataLines.isEmpty else {
-                                continue
-                            }
-
-                            let payload = dataLines.joined(separator: "\n")
-                            dataLines.removeAll(keepingCapacity: true)
-
-                            if try consumePayload(payload) {
-                                reachedDone = true
-                                break
-                            }
-
+                        guard
+                            let event = sseDecoder.consume(rawLine)
+                        else {
                             continue
                         }
 
-                        if rawLine.hasPrefix(":") {
-                            continue
+                        if try consumePayload(event.data) {
+                            reachedDone = true
+                            break
                         }
-
-                        guard rawLine.hasPrefix("data:") else {
-                            continue
-                        }
-
-                        var dataLine = String(rawLine.dropFirst(5))
-                        if dataLine.first == " " {
-                            dataLine.removeFirst()
-                        }
-                        dataLines.append(dataLine)
                     }
 
-                    if !reachedDone && !dataLines.isEmpty {
-                        _ = try consumePayload(
-                            dataLines.joined(separator: "\n")
-                        )
+                    if
+                        !reachedDone,
+                        let event = sseDecoder.finish()
+                    {
+                        _ = try consumePayload(event.data)
                     }
 
                     let completedResponse = AIResponse(
