@@ -9,6 +9,11 @@ typedef void (*AICKCoreAIGenerateCompletion)(
     int32_t status
 );
 
+typedef void (*AICKCoreAIStatusCompletion)(
+    void * _Nullable context,
+    int32_t status
+);
+
 FOUNDATION_EXPORT int32_t AICKCoreAIIsAvailable(void)
     API_AVAILABLE(ios(27.0));
 
@@ -17,6 +22,18 @@ FOUNDATION_EXPORT void AICKCoreAIGenerate(
     const char *modelPath,
     void * _Nullable context,
     AICKCoreAIGenerateCompletion completion
+) API_AVAILABLE(ios(27.0));
+
+FOUNDATION_EXPORT void AICKCoreAIPrepare(
+    const char *modelPath,
+    void * _Nullable context,
+    AICKCoreAIStatusCompletion completion
+) API_AVAILABLE(ios(27.0));
+
+FOUNDATION_EXPORT void AICKCoreAIUnload(
+    const char *modelPath,
+    void * _Nullable context,
+    AICKCoreAIStatusCompletion completion
 ) API_AVAILABLE(ios(27.0));
 
 NS_ASSUME_NONNULL_END

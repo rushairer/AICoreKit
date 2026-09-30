@@ -16,10 +16,10 @@
 - [x] Define local model resource identity and readiness.
 - [x] Add a live weak-symbol host bridge using the stable C ABI.
 - [x] Add an isolated iOS/macOS 27 Core AI runtime Swift package.
+- [x] Add explicit model prepare / unload lifecycle hooks.
+- [x] Add a Qwen3-0.6B export and integration fixture without shipping model assets.
 - [ ] Package the runtime as a weak-linked framework in the compatibility lab.
-- [ ] Add a Qwen3-0.6B integration fixture without shipping model assets in the package.
 - [ ] Validate iOS 26 launch, iOS 27 inference, Release archive, memory, cancellation, and thermal behavior.
-- [ ] Add explicit model unload / memory-pressure lifecycle hooks.
 
 ## 0.3 Cloud providers
 

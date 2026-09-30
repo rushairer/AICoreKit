@@ -1,7 +1,7 @@
 import AICore
 import Foundation
 
-public struct CoreAIProvider: AIProvider {
+public struct CoreAIProvider: AIProvider, AIResourceManaging {
     public let id: AIProviderID
     public let displayName: String
 
@@ -41,6 +41,29 @@ public struct CoreAIProvider: AIProvider {
         }
     }
 
+    public func prepareResources() async throws {
+        guard let lifecycleBridge = bridge as? any CoreAIModelLifecycleBridge else {
+            throw AIError.unsupportedCapability
+        }
+
+        let resource = try await requiredModelResource(requireExistingFile: true)
+        let status = await lifecycleBridge.prepare(modelPath: resource.path)
+        try throwIfNeeded(status, operation: "prepare")
+    }
+
+    public func releaseResources() async throws {
+        guard let lifecycleBridge = bridge as? any CoreAIModelLifecycleBridge else {
+            throw AIError.unsupportedCapability
+        }
+
+        guard let resource = try await resourceProvider.modelResource() else {
+            return
+        }
+
+        let status = await lifecycleBridge.unload(modelPath: resource.path)
+        try throwIfNeeded(status, operation: "unload")
+    }
+
     public func generate(_ request: AIRequest) async throws -> AIResponse {
         guard capabilities.satisfies(request.requiredCapabilities) else {
             throw AIError.unsupportedCapability
@@ -51,10 +74,7 @@ public struct CoreAIProvider: AIProvider {
             throw AIError.unavailable(unavailableReason(from: currentAvailability))
         }
 
-        guard let resource = try await resourceProvider.modelResource(),
-              resource.exists else {
-            throw AIError.unavailable(.modelMissing)
-        }
+        let resource = try await requiredModelResource(requireExistingFile: true)
 
         let wireRequest = CoreAIWireRequest(
             messages: request.messages.map(CoreAIWireMessage.init),
@@ -75,24 +95,7 @@ public struct CoreAIProvider: AIProvider {
             modelPath: resource.path
         )
 
-        switch invocation.status {
-        case .success:
-            break
-        case .invalidRequest:
-            throw AIError.invalidRequest("Core AI bridge rejected the request")
-        case .modelLoadFailed:
-            throw AIError.unavailable(.modelNotReady)
-        case .generationFailed:
-            throw AIError.providerFailure(providerID: id, message: "Core AI generation failed")
-        case .serializationFailed:
-            throw AIError.decodingFailure("Core AI bridge failed to serialize its response")
-        case .cancelled:
-            throw AIError.cancelled
-        case .unavailable:
-            throw AIError.unavailable(.frameworkUnavailable)
-        case .unknown:
-            throw AIError.providerFailure(providerID: id, message: "Unknown Core AI bridge failure")
-        }
+        try throwIfNeeded(invocation.status, operation: "generate")
 
         guard let responseJSON = invocation.responseJSON,
               let responseData = responseJSON.data(using: .utf8) else {
@@ -115,6 +118,52 @@ public struct CoreAIProvider: AIProvider {
                 outputTokens: wireResponse.outputTokens
             )
         )
+    }
+
+    private func requiredModelResource(
+        requireExistingFile: Bool
+    ) async throws -> CoreAIModelResource {
+        guard let resource = try await resourceProvider.modelResource() else {
+            throw AIError.unavailable(.modelMissing)
+        }
+
+        if requireExistingFile && !resource.exists {
+            throw AIError.unavailable(.modelMissing)
+        }
+
+        return resource
+    }
+
+    private func throwIfNeeded(
+        _ status: CoreAIBridgeStatus,
+        operation: String
+    ) throws {
+        switch status {
+        case .success:
+            return
+        case .invalidRequest:
+            throw AIError.invalidRequest("Core AI bridge rejected the \(operation) request")
+        case .modelLoadFailed:
+            throw AIError.unavailable(.modelNotReady)
+        case .generationFailed:
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "Core AI \(operation) failed"
+            )
+        case .serializationFailed:
+            throw AIError.decodingFailure(
+                "Core AI bridge failed to serialize the \(operation) response"
+            )
+        case .cancelled:
+            throw AIError.cancelled
+        case .unavailable:
+            throw AIError.unavailable(.frameworkUnavailable)
+        case .unknown:
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "Unknown Core AI \(operation) failure"
+            )
+        }
     }
 
     private func unavailableReason(from availability: AIAvailability) -> AIUnavailabilityReason {

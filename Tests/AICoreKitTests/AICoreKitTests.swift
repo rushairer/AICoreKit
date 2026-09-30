@@ -207,3 +207,53 @@ extension AICoreKitTests {
         XCTAssertEqual(invocation.status, .unavailable)
     }
 }
+
+
+private struct LifecycleStubCoreAIBridge: CoreAIModelLifecycleBridge {
+    let prepareStatus: CoreAIBridgeStatus
+    let unloadStatus: CoreAIBridgeStatus
+
+    func availability() async -> AIAvailability {
+        .available
+    }
+
+    func generate(
+        requestJSON: String,
+        modelPath: String
+    ) async -> CoreAIBridgeInvocation {
+        CoreAIBridgeInvocation(status: .unavailable)
+    }
+
+    func prepare(modelPath: String) async -> CoreAIBridgeStatus {
+        prepareStatus
+    }
+
+    func unload(modelPath: String) async -> CoreAIBridgeStatus {
+        unloadStatus
+    }
+}
+
+extension AICoreKitTests {
+    func testCoreAIProviderPreparesAndReleasesResources() async throws {
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try Data().write(to: temporaryURL)
+        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+
+        let provider = CoreAIProvider(
+            bridge: LifecycleStubCoreAIBridge(
+                prepareStatus: .success,
+                unloadStatus: .success
+            ),
+            resourceProvider: StaticCoreAIModelResourceProvider(
+                resource: CoreAIModelResource(
+                    identifier: "fixture",
+                    path: temporaryURL.path
+                )
+            )
+        )
+
+        try await provider.prepareResources()
+        try await provider.releaseResources()
+    }
+}

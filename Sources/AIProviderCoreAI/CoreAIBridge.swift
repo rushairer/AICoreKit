@@ -33,7 +33,12 @@ public protocol CoreAIBridge: Sendable {
     ) async -> CoreAIBridgeInvocation
 }
 
-public struct UnavailableCoreAIBridge: CoreAIBridge {
+public protocol CoreAIModelLifecycleBridge: CoreAIBridge {
+    func prepare(modelPath: String) async -> CoreAIBridgeStatus
+    func unload(modelPath: String) async -> CoreAIBridgeStatus
+}
+
+public struct UnavailableCoreAIBridge: CoreAIModelLifecycleBridge {
     public init() {}
 
     public func availability() async -> AIAvailability {
@@ -45,5 +50,13 @@ public struct UnavailableCoreAIBridge: CoreAIBridge {
         modelPath: String
     ) async -> CoreAIBridgeInvocation {
         CoreAIBridgeInvocation(status: .unavailable)
+    }
+
+    public func prepare(modelPath: String) async -> CoreAIBridgeStatus {
+        .unavailable
+    }
+
+    public func unload(modelPath: String) async -> CoreAIBridgeStatus {
+        .unavailable
     }
 }

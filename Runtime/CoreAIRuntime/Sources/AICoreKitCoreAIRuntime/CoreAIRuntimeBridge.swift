@@ -9,6 +9,12 @@ public typealias AICKCoreAIGenerateCompletion =
         Int32
     ) -> Void
 
+public typealias AICKCoreAIStatusCompletion =
+    @convention(c) (
+        UnsafeMutableRawPointer?,
+        Int32
+    ) -> Void
+
 @_cdecl("AICKCoreAIIsAvailable")
 public func AICKCoreAIIsAvailableExport() -> Int32 {
     1
@@ -21,10 +27,7 @@ public func AICKCoreAIGenerateExport(
     _ context: UnsafeMutableRawPointer?,
     _ completion: AICKCoreAIGenerateCompletion
 ) {
-    guard
-        let requestJSON,
-        let modelPath
-    else {
+    guard let requestJSON, let modelPath else {
         completion(context, nil, RuntimeStatus.invalidRequest.rawValue)
         return
     }
@@ -60,21 +63,66 @@ public func AICKCoreAIGenerateExport(
                 status: .success
             )
         } catch let failure as RuntimeFailure {
-            callback.complete(
-                json: nil,
-                status: failure.status
-            )
+            callback.complete(json: nil, status: failure.status)
         } catch is CancellationError {
-            callback.complete(
-                json: nil,
-                status: .cancelled
-            )
+            callback.complete(json: nil, status: .cancelled)
         } catch {
-            callback.complete(
-                json: nil,
-                status: .generationFailed
-            )
+            callback.complete(json: nil, status: .generationFailed)
         }
+    }
+}
+
+@_cdecl("AICKCoreAIPrepare")
+public func AICKCoreAIPrepareExport(
+    _ modelPath: UnsafePointer<CChar>?,
+    _ context: UnsafeMutableRawPointer?,
+    _ completion: AICKCoreAIStatusCompletion
+) {
+    guard let modelPath else {
+        completion(context, RuntimeStatus.invalidRequest.rawValue)
+        return
+    }
+
+    let modelPathString = String(cString: modelPath)
+    let callback = RuntimeStatusCallback(
+        context: context,
+        completion: completion
+    )
+
+    Task {
+        do {
+            try await CoreAIRuntime.shared.prepare(modelPath: modelPathString)
+            callback.complete(status: .success)
+        } catch let failure as RuntimeFailure {
+            callback.complete(status: failure.status)
+        } catch is CancellationError {
+            callback.complete(status: .cancelled)
+        } catch {
+            callback.complete(status: .modelLoadFailed)
+        }
+    }
+}
+
+@_cdecl("AICKCoreAIUnload")
+public func AICKCoreAIUnloadExport(
+    _ modelPath: UnsafePointer<CChar>?,
+    _ context: UnsafeMutableRawPointer?,
+    _ completion: AICKCoreAIStatusCompletion
+) {
+    guard let modelPath else {
+        completion(context, RuntimeStatus.invalidRequest.rawValue)
+        return
+    }
+
+    let modelPathString = String(cString: modelPath)
+    let callback = RuntimeStatusCallback(
+        context: context,
+        completion: completion
+    )
+
+    Task {
+        await CoreAIRuntime.shared.unload(modelPath: modelPathString)
+        callback.complete(status: .success)
     }
 }
 
@@ -83,6 +131,28 @@ private actor CoreAIRuntime {
 
     private var cachedModel: CoreAILanguageModel?
     private var cachedModelPath: String?
+
+    func prepare(modelPath: String) async throws {
+        let model = try await model(at: modelPath)
+
+        do {
+            try await model.load()
+        } catch is CancellationError {
+            throw RuntimeFailure.cancelled
+        } catch {
+            throw RuntimeFailure.modelLoadFailed
+        }
+    }
+
+    func unload(modelPath: String) {
+        guard cachedModelPath == modelPath else {
+            return
+        }
+
+        cachedModel?.unload()
+        cachedModel = nil
+        cachedModelPath = nil
+    }
 
     func generate(
         request: RuntimeRequest,
@@ -147,12 +217,15 @@ private actor CoreAIRuntime {
             return cachedModel
         }
 
+        if let cachedModel {
+            cachedModel.unload()
+            self.cachedModel = nil
+            cachedModelPath = nil
+        }
+
         do {
             let model = try await CoreAILanguageModel(
-                resourcesAt: URL(
-                    fileURLWithPath: path,
-                    isDirectory: true
-                )
+                resourcesAt: URL(fileURLWithPath: path, isDirectory: true)
             )
             cachedModel = model
             cachedModelPath = path
@@ -199,6 +272,15 @@ private struct RuntimeCallback: @unchecked Sendable {
         json.withCString {
             completion(context, $0, status.rawValue)
         }
+    }
+}
+
+private struct RuntimeStatusCallback: @unchecked Sendable {
+    let context: UnsafeMutableRawPointer?
+    let completion: AICKCoreAIStatusCompletion
+
+    func complete(status: RuntimeStatus) {
+        completion(context, status.rawValue)
     }
 }
 
