@@ -29,6 +29,7 @@ public struct OpenAIProvider: AIProvider {
     public var capabilities: AICapabilities {
         var capabilities: AICapabilities = [
             .textGeneration,
+            .structuredGeneration,
             .remoteExecution,
             .requiresNetwork
         ]
@@ -68,7 +69,8 @@ public struct OpenAIProvider: AIProvider {
 
         let urlRequest = try await makeURLRequest(
             for: request,
-            stream: false
+            stream: false,
+            structuredSchema: nil
         )
 
         let httpResponse: AIHTTPResponse
@@ -119,7 +121,8 @@ public struct OpenAIProvider: AIProvider {
 
                     let urlRequest = try await makeURLRequest(
                         for: request,
-                        stream: true
+                        stream: true,
+                        structuredSchema: nil
                     )
 
                     let httpResponse: AIHTTPLineStreamResponse
@@ -321,9 +324,104 @@ public struct OpenAIProvider: AIProvider {
         }
     }
 
+    public func generateStructured<Output: Decodable & Sendable>(
+        _ request: AIStructuredRequest<Output>
+    ) async throws -> Output {
+        guard capabilities.satisfies(
+            request.requiredCapabilities
+        ) else {
+            throw AIError.unsupportedCapability
+        }
+
+        guard let schema = request.schema else {
+            throw AIError.invalidRequest(
+                "OpenAI structured generation requires a JSON schema"
+            )
+        }
+
+        let messages: [AIMessage] = [
+            .system(request.instructions),
+            .user(request.input)
+        ]
+
+        let baseRequest = AIRequest(
+            messages: messages,
+            requiredCapabilities: [.textGeneration],
+            executionPreference: request.executionPreference,
+            metadata: request.metadata,
+            maxOutputTokens: request.maxOutputTokens,
+            temperature: request.temperature
+        )
+
+        let urlRequest = try await makeURLRequest(
+            for: baseRequest,
+            stream: false,
+            structuredSchema: schema
+        )
+
+        let httpResponse: AIHTTPResponse
+        do {
+            httpResponse = try await transport.data(
+                for: urlRequest
+            )
+        } catch is CancellationError {
+            throw AIError.cancelled
+        } catch {
+            throw AIError.transportFailure(
+                error.localizedDescription
+            )
+        }
+
+        try validateHTTPStatus(
+            httpResponse.statusCode,
+            data: httpResponse.data
+        )
+
+        let response: OpenAIResponseObject
+        do {
+            response = try JSONDecoder().decode(
+                OpenAIResponseObject.self,
+                from: httpResponse.data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+
+        let normalized = try makeAIResponse(
+            from: response
+        )
+
+        guard normalized.finishReason == .completed else {
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "OpenAI structured response did not complete"
+            )
+        }
+
+        guard let data = normalized.text.data(using: .utf8) else {
+            throw AIError.decodingFailure(
+                "OpenAI structured response was not UTF-8"
+            )
+        }
+
+        do {
+            return try JSONDecoder().decode(
+                Output.self,
+                from: data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+    }
+
     private func makeURLRequest(
         for request: AIRequest,
-        stream: Bool
+        stream: Bool,
+        structuredSchema: AIStructuredOutputSchema?
     ) async throws -> URLRequest {
         guard let endpointURL else {
             throw AIError.invalidRequest(
@@ -362,7 +460,12 @@ public struct OpenAIProvider: AIProvider {
                 request.temperature
                 ?? configuration.defaultTemperature,
             stream: stream,
-            store: configuration.storeResponses
+            store: configuration.storeResponses,
+            text: structuredSchema.map {
+                OpenAIResponsesRequest.TextConfiguration(
+                    schema: $0
+                )
+            }
         )
 
         var urlRequest = URLRequest(url: endpointURL)

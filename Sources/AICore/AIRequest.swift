@@ -32,6 +32,9 @@ public struct AIStructuredRequest<Output: Decodable & Sendable>: Sendable {
     public let requiredCapabilities: AICapabilities
     public let executionPreference: AIExecutionPreference
     public let metadata: [String: String]
+    public let schema: AIStructuredOutputSchema?
+    public let maxOutputTokens: Int?
+    public let temperature: Double?
     public let outputType: Output.Type
 
     public init(
@@ -40,6 +43,9 @@ public struct AIStructuredRequest<Output: Decodable & Sendable>: Sendable {
         requiredCapabilities: AICapabilities = [.structuredGeneration],
         executionPreference: AIExecutionPreference = .automatic,
         metadata: [String: String] = [:],
+        schema: AIStructuredOutputSchema? = nil,
+        maxOutputTokens: Int? = nil,
+        temperature: Double? = nil,
         outputType: Output.Type = Output.self
     ) {
         self.instructions = instructions
@@ -47,6 +53,9 @@ public struct AIStructuredRequest<Output: Decodable & Sendable>: Sendable {
         self.requiredCapabilities = requiredCapabilities
         self.executionPreference = executionPreference
         self.metadata = metadata
+        self.schema = schema
+        self.maxOutputTokens = maxOutputTokens
+        self.temperature = temperature
         self.outputType = outputType
     }
 }

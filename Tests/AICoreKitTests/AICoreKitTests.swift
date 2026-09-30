@@ -1399,3 +1399,141 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+private struct StructuredContactFixture:
+    Decodable,
+    Equatable,
+    Sendable
+{
+    let name: String
+    let age: Int
+}
+
+extension AICoreKitTests {
+    func testStructuredOutputSchemaRejectsNonObjectJSON() {
+        XCTAssertThrowsError(
+            try AIStructuredOutputSchema(
+                name: "invalid",
+                schemaJSON: "[1, 2, 3]"
+            )
+        )
+    }
+
+    func testOpenAIProviderGeneratesNativeStructuredOutput() async throws {
+        let responseData = """
+        {
+          "status": "completed",
+          "output": [
+            {
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "{\\\"name\\\":\\\"Ada\\\",\\\"age\\\":36}"
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 8
+          },
+          "incomplete_details": null,
+          "error": null
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(
+                model: "fixture-openai",
+                baseURL: URL(
+                    string: "https://openai.example/v1"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "openai-token"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(
+                .structuredGeneration
+            )
+        )
+
+        let schema = try AIStructuredOutputSchema(
+            name: "contact",
+            description: "A contact record",
+            schemaJSON: """
+            {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"}
+              },
+              "required": ["name", "age"],
+              "additionalProperties": false
+            }
+            """
+        )
+
+        let value: StructuredContactFixture =
+            try await provider.generateStructured(
+                AIStructuredRequest(
+                    instructions: "Extract the contact.",
+                    input: "Ada is 36.",
+                    schema: schema,
+                    outputType: StructuredContactFixture.self
+                )
+            )
+
+        XCTAssertEqual(
+            value,
+            StructuredContactFixture(
+                name: "Ada",
+                age: 36
+            )
+        )
+
+        let capturedRequest = await transport.lastRequest()
+        let bodyData = try XCTUnwrap(
+            capturedRequest?.httpBody
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+        let textConfig = try XCTUnwrap(
+            body["text"] as? [String: Any]
+        )
+        let format = try XCTUnwrap(
+            textConfig["format"] as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            format["type"] as? String,
+            "json_schema"
+        )
+        XCTAssertEqual(
+            format["name"] as? String,
+            "contact"
+        )
+        XCTAssertEqual(
+            format["strict"] as? Bool,
+            true
+        )
+        XCTAssertNotNil(
+            format["schema"] as? [String: Any]
+        )
+    }
+}

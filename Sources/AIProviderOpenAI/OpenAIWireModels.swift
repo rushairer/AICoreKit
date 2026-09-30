@@ -7,6 +7,7 @@ struct OpenAIResponsesRequest: Encodable, Sendable {
     let temperature: Double?
     let stream: Bool
     let store: Bool
+    let text: TextConfiguration?
 
     enum CodingKeys: String, CodingKey {
         case model
@@ -15,6 +16,7 @@ struct OpenAIResponsesRequest: Encodable, Sendable {
         case temperature
         case stream
         case store
+        case text
     }
 
     struct InputMessage: Encodable, Sendable {
@@ -34,6 +36,30 @@ struct OpenAIResponsesRequest: Encodable, Sendable {
             }
 
             content = message.content
+        }
+    }
+
+    struct TextConfiguration: Encodable, Sendable {
+        let format: Format
+
+        struct Format: Encodable, Sendable {
+            let type: String
+            let name: String
+            let description: String?
+            let schema: AIJSONValue
+            let strict: Bool
+
+            init(schema: AIStructuredOutputSchema) {
+                type = "json_schema"
+                name = schema.name
+                description = schema.description
+                self.schema = schema.schema
+                strict = schema.strict
+            }
+        }
+
+        init(schema: AIStructuredOutputSchema) {
+            format = Format(schema: schema)
         }
     }
 }
