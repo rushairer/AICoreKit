@@ -1640,3 +1640,156 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testGeminiProviderGeneratesNativeStructuredOutput() async throws {
+        let responseData = """
+        {
+          "status": "completed",
+          "steps": [
+            {
+              "type": "model_output",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\\\"name\\\":\\\"Ada\\\",\\\"age\\\":36}"
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "total_input_tokens": 10,
+            "total_output_tokens": 8,
+            "total_tokens": 18
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = GeminiProvider(
+            configuration: GeminiProviderConfiguration(
+                model: "fixture-gemini",
+                baseURL: URL(
+                    string: "https://gemini.example"
+                )!,
+                defaultMaxOutputTokens: 192
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "gemini-key"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(
+                .structuredGeneration
+            )
+        )
+
+        let schema = try AIStructuredOutputSchema(
+            name: "contact",
+            schemaJSON: """
+            {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"}
+              },
+              "required": ["name", "age"],
+              "additionalProperties": false
+            }
+            """
+        )
+
+        let value: StructuredContactFixture =
+            try await provider.generateStructured(
+                AIStructuredRequest(
+                    instructions: "Extract the contact.",
+                    input: "Ada is 36.",
+                    schema: schema,
+                    temperature: 0.2,
+                    outputType: StructuredContactFixture.self
+                )
+            )
+
+        XCTAssertEqual(
+            value,
+            StructuredContactFixture(
+                name: "Ada",
+                age: 36
+            )
+        )
+
+        let capturedRequest = await transport.lastRequest()
+
+        XCTAssertEqual(
+            capturedRequest?.url?.absoluteString,
+            "https://gemini.example/v1beta/interactions"
+        )
+        XCTAssertEqual(
+            capturedRequest?.value(
+                forHTTPHeaderField: "x-goog-api-key"
+            ),
+            "gemini-key"
+        )
+
+        let bodyData = try XCTUnwrap(
+            capturedRequest?.httpBody
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            body["model"] as? String,
+            "fixture-gemini"
+        )
+        XCTAssertEqual(
+            body["input"] as? String,
+            "Ada is 36."
+        )
+        XCTAssertEqual(
+            body["system_instruction"] as? String,
+            "Extract the contact."
+        )
+        XCTAssertEqual(
+            body["store"] as? Bool,
+            false
+        )
+
+        let responseFormat = try XCTUnwrap(
+            body["response_format"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            responseFormat["type"] as? String,
+            "text"
+        )
+        XCTAssertEqual(
+            responseFormat["mime_type"] as? String,
+            "application/json"
+        )
+        XCTAssertNotNil(
+            responseFormat["schema"] as? [String: Any]
+        )
+
+        let generationConfig = try XCTUnwrap(
+            body["generation_config"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            generationConfig["max_output_tokens"] as? Int,
+            192
+        )
+        XCTAssertEqual(
+            generationConfig["temperature"] as? Double,
+            0.2
+        )
+    }
+}

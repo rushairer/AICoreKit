@@ -71,7 +71,8 @@ The provider:
 - maps AICoreKit system messages to the top-level Messages API `system` field;
 - advertises streaming only when the injected transport supports `AIHTTPStreamingTransport`;
 - leaves temperature unset by default, so applications opt in explicitly when the selected model supports it;
-- does not yet advertise tool calling or structured generation.
+- supports native structured generation through `output_config.format`;
+- does not yet advertise tool calling.
 
 
 ## Gemini provider
@@ -94,8 +95,10 @@ The provider:
 - maps assistant history to Gemini's `model` role;
 - uses `generateContent` for non-streaming generation;
 - uses `streamGenerateContent?alt=sse` for streaming;
+- uses the Interactions API for native JSON-schema structured generation;
+- explicitly defaults Interactions `store` to `false`;
 - leaves temperature unset by default;
-- exposes only normalized text and streaming capabilities for now, even though Gemini can support additional media and tool features.
+- does not yet advertise tool, image, or audio capabilities.
 
 
 ## OpenAI provider
@@ -119,4 +122,5 @@ The provider:
 - maps AICore system, user, and assistant history into Responses API input messages;
 - streams normalized text deltas from `response.output_text.delta`;
 - derives completion state and usage from terminal Responses API events;
-- deliberately leaves tool calling and structured generation for AICoreKit's cross-provider normalization layer.
+- supports native JSON-schema structured outputs;
+- deliberately leaves tool calling for AICoreKit's cross-provider normalization layer.

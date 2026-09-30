@@ -7,10 +7,12 @@ public struct GeminiProviderConfiguration: Sendable {
     public let model: String
     public let baseURL: URL
     public let apiVersion: String
+    public let interactionsPath: String
     public let timeout: TimeInterval
     public let defaultMaxOutputTokens: Int?
     public let defaultTemperature: Double?
     public let apiKeyHeaderName: String
+    public let storeInteractions: Bool
 
     public init(
         providerID: AIProviderID = .gemini,
@@ -20,19 +22,23 @@ public struct GeminiProviderConfiguration: Sendable {
             string: "https://generativelanguage.googleapis.com"
         )!,
         apiVersion: String = "v1beta",
+        interactionsPath: String = "interactions",
         timeout: TimeInterval = 60,
         defaultMaxOutputTokens: Int? = nil,
         defaultTemperature: Double? = nil,
-        apiKeyHeaderName: String = "x-goog-api-key"
+        apiKeyHeaderName: String = "x-goog-api-key",
+        storeInteractions: Bool = false
     ) {
         self.providerID = providerID
         self.displayName = displayName
         self.model = model
         self.baseURL = baseURL
         self.apiVersion = apiVersion
+        self.interactionsPath = interactionsPath
         self.timeout = timeout
         self.defaultMaxOutputTokens = defaultMaxOutputTokens
         self.defaultTemperature = defaultTemperature
         self.apiKeyHeaderName = apiKeyHeaderName
+        self.storeInteractions = storeInteractions
     }
 }

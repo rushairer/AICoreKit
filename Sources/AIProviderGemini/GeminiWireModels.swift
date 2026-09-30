@@ -83,3 +83,80 @@ struct GeminiErrorEnvelope: Decodable, Sendable {
         let status: String?
     }
 }
+
+
+struct GeminiInteractionRequest: Encodable, Sendable {
+    let model: String
+    let input: String
+    let systemInstruction: String?
+    let responseFormat: ResponseFormat
+    let store: Bool
+    let generationConfig: GenerationConfiguration?
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case input
+        case systemInstruction = "system_instruction"
+        case responseFormat = "response_format"
+        case store
+        case generationConfig = "generation_config"
+    }
+
+    struct ResponseFormat: Encodable, Sendable {
+        let type: String
+        let mimeType: String
+        let schema: AIJSONValue
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case mimeType = "mime_type"
+            case schema
+        }
+
+        init(schema: AIStructuredOutputSchema) {
+            type = "text"
+            mimeType = "application/json"
+            self.schema = schema.schema
+        }
+    }
+
+    struct GenerationConfiguration: Encodable, Sendable {
+        let maxOutputTokens: Int?
+        let temperature: Double?
+
+        enum CodingKeys: String, CodingKey {
+            case maxOutputTokens = "max_output_tokens"
+            case temperature
+        }
+
+        var isEmpty: Bool {
+            maxOutputTokens == nil && temperature == nil
+        }
+    }
+}
+
+struct GeminiInteractionResponse: Decodable, Sendable {
+    let status: String
+    let steps: [Step]?
+    let usage: Usage?
+
+    struct Step: Decodable, Sendable {
+        let type: String
+        let content: [Content]?
+    }
+
+    struct Content: Decodable, Sendable {
+        let type: String
+        let text: String?
+    }
+
+    struct Usage: Decodable, Sendable {
+        let totalInputTokens: Int?
+        let totalOutputTokens: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case totalInputTokens = "total_input_tokens"
+            case totalOutputTokens = "total_output_tokens"
+        }
+    }
+}

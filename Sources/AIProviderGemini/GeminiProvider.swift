@@ -29,6 +29,7 @@ public struct GeminiProvider: AIProvider {
     public var capabilities: AICapabilities {
         var capabilities: AICapabilities = [
             .textGeneration,
+            .structuredGeneration,
             .remoteExecution,
             .requiresNetwork
         ]
@@ -281,10 +282,218 @@ public struct GeminiProvider: AIProvider {
         }
     }
 
+    public func generateStructured<Output: Decodable & Sendable>(
+        _ request: AIStructuredRequest<Output>
+    ) async throws -> Output {
+        guard capabilities.satisfies(
+            request.requiredCapabilities
+        ) else {
+            throw AIError.unsupportedCapability
+        }
+
+        guard let schema = request.schema else {
+            throw AIError.invalidRequest(
+                "Gemini structured generation requires a JSON schema"
+            )
+        }
+
+        guard let url = interactionsURL else {
+            throw AIError.invalidRequest(
+                "Invalid Gemini Interactions endpoint URL"
+            )
+        }
+
+        let input = request.input.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !input.isEmpty else {
+            throw AIError.invalidRequest(
+                "Gemini Interactions API requires non-empty input"
+            )
+        }
+
+        let credential = try await requiredCredential()
+
+        let generationConfig =
+            GeminiInteractionRequest.GenerationConfiguration(
+                maxOutputTokens:
+                    request.maxOutputTokens
+                    ?? configuration.defaultMaxOutputTokens,
+                temperature:
+                    request.temperature
+                    ?? configuration.defaultTemperature
+            )
+
+        let body = GeminiInteractionRequest(
+            model: normalizedModel,
+            input: request.input,
+            systemInstruction:
+                request.instructions.isEmpty
+                ? nil
+                : request.instructions,
+            responseFormat:
+                GeminiInteractionRequest.ResponseFormat(
+                    schema: schema
+                ),
+            store: configuration.storeInteractions,
+            generationConfig:
+                generationConfig.isEmpty
+                ? nil
+                : generationConfig
+        )
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = configuration.timeout
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        urlRequest.setValue(
+            credential,
+            forHTTPHeaderField:
+                configuration.apiKeyHeaderName
+        )
+
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            throw AIError.invalidRequest(
+                "Failed to encode Gemini Interactions request"
+            )
+        }
+
+        let response: AIHTTPResponse
+        do {
+            response = try await transport.data(
+                for: urlRequest
+            )
+        } catch is CancellationError {
+            throw AIError.cancelled
+        } catch {
+            throw AIError.transportFailure(
+                error.localizedDescription
+            )
+        }
+
+        try validateHTTPStatus(
+            response.statusCode,
+            data: response.data
+        )
+
+        let interaction: GeminiInteractionResponse
+        do {
+            interaction = try JSONDecoder().decode(
+                GeminiInteractionResponse.self,
+                from: response.data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+
+        switch interaction.status {
+        case "completed":
+            break
+        case "cancelled":
+            throw AIError.cancelled
+        case "incomplete":
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "Gemini structured interaction was incomplete"
+            )
+        case "failed":
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "Gemini structured interaction failed"
+            )
+        case "requires_action":
+            throw AIError.unsupportedCapability
+        default:
+            throw AIError.providerFailure(
+                providerID: id,
+                message:
+                    "Unexpected Gemini interaction status: "
+                    + interaction.status
+            )
+        }
+
+        let text = interaction.steps?
+            .filter { $0.type == "model_output" }
+            .flatMap { $0.content ?? [] }
+            .filter { $0.type == "text" }
+            .compactMap(\.text)
+            .joined()
+            ?? ""
+
+        guard !text.isEmpty else {
+            throw AIError.decodingFailure(
+                "Gemini structured interaction did not contain text output"
+            )
+        }
+
+        guard let data = text.data(using: .utf8) else {
+            throw AIError.decodingFailure(
+                "Gemini structured response was not UTF-8"
+            )
+        }
+
+        do {
+            return try JSONDecoder().decode(
+                Output.self,
+                from: data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+    }
+
     private var credentialRequest: AICredentialRequest {
         AICredentialRequest(
             providerID: id,
             kind: .apiKey
+        )
+    }
+
+    private var normalizedModel: String {
+        configuration.model
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            .replacingOccurrences(
+                of: "models/",
+                with: ""
+            )
+    }
+
+    private var interactionsURL: URL? {
+        let base = configuration.baseURL.absoluteString
+            .trimmingCharacters(
+                in: CharacterSet(charactersIn: "/")
+            )
+        let version = configuration.apiVersion
+            .trimmingCharacters(
+                in: CharacterSet(charactersIn: "/")
+            )
+        let path = configuration.interactionsPath
+            .trimmingCharacters(
+                in: CharacterSet(charactersIn: "/")
+            )
+
+        guard
+            !base.isEmpty,
+            !version.isEmpty,
+            !path.isEmpty,
+            !normalizedModel.isEmpty
+        else {
+            return nil
+        }
+
+        return URL(
+            string: "\(base)/\(version)/\(path)"
         )
     }
 
@@ -297,14 +506,7 @@ public struct GeminiProvider: AIProvider {
             .trimmingCharacters(
                 in: CharacterSet(charactersIn: "/")
             )
-        let model = configuration.model
-            .trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-            .replacingOccurrences(
-                of: "models/",
-                with: ""
-            )
+        let model = normalizedModel
 
         guard
             !base.isEmpty,
