@@ -38,8 +38,8 @@ jobs:
       - name: Verify Core AI runtime artifact
         run: |
           ./Scripts/verify-coreai-runtime-framework.sh \
-            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/AICoreKitCoreAIRuntime.framework"
+            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/PackageFrameworks/AICoreKitCoreAIRuntime.framework"
       - name: Verify lower-minimum host weak link
         run: |
           ./Scripts/build-verify-coreai-host-fixture.sh \
-            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/AICoreKitCoreAIRuntime.framework"
+            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/PackageFrameworks/AICoreKitCoreAIRuntime.framework"
