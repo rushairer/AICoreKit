@@ -32,7 +32,7 @@ The lower-minimum host must not import the `AICoreKitCoreAIRuntime` Swift module
 
 A pure `dlsym` implementation does not create a link-time reference to the runtime framework. When dead stripping of unused dynamic libraries is enabled, the final host binary can lose the weak framework load command entirely.
 
-`AICoreWeakBridgeShim` therefore carries one deliberately tiny weak import of `AICKCoreAIIsAvailable`. This preserves the weak framework relationship in the final Mach-O while keeping all higher-level Runtime Swift types out of the lower-minimum host.
+`AICoreWeakBridgeShim` therefore carries one deliberately tiny weak import of `AICKCoreAIIsAvailable`. It is packaged only through the optional `AIProviderCoreAIWeakLink` product, so ordinary AICoreKit users do not inherit a Core AI link requirement. Apps embedding the runtime use `WeakLinkedCoreAIBridge`, which combines this link-time keepalive with the dynamic C ABI bridge.
 
 Generation and lifecycle operations still resolve through the stable C ABI.
 
@@ -59,7 +59,8 @@ A production host must:
 2. Sign the embedded framework as part of normal app signing.
 3. Keep `@executable_path/Frameworks` in `LD_RUNPATH_SEARCH_PATHS`.
 4. Link the runtime framework weakly, not strongly.
-5. Keep all host calls behind `WeakSymbolCoreAIBridge` and runtime availability checks.
+5. Add the `AIProviderCoreAIWeakLink` product and use `WeakLinkedCoreAIBridge`.
+6. Keep all runtime calls behind availability checks.
 
 For an Xcode application target, the effective linker invocation must produce `LC_LOAD_WEAK_DYLIB` for the runtime framework. A typical linker flag is:
 

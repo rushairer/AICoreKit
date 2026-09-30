@@ -21,7 +21,8 @@ It is designed around capabilities rather than vendors, so product code can use 
 - `AIOrchestration` — provider registry, routing, execution preference, and fallback.
 - `AITools` — tool definitions, registry, side-effect classification, and execution policy.
 - `AIProviderApple` — Apple Foundation Models provider, gated by runtime availability.
-- `AIProviderCoreAI` — host-safe local Core AI provider plus weak-symbol bridge.
+- `AIProviderCoreAI` — host-safe local Core AI provider and dynamic C ABI bridge.
+- `AIProviderCoreAIWeakLink` — optional weak-link support for apps embedding the iOS/macOS 27 Core AI runtime.
 - `AICoreKit` — convenience umbrella module.
 
 Future provider modules will include OpenAI-compatible APIs, OpenAI, Anthropic, and Gemini.
@@ -50,7 +51,9 @@ Provider credentials are injected through protocols. AICoreKit does not persist 
 
 ## Core AI local models
 
-The root package remains usable by lower-minimum hosts. `AIProviderCoreAI` communicates through a stable C ABI resolved by `WeakSymbolCoreAIBridge`.
+The root package remains usable by lower-minimum hosts. `AIProviderCoreAI` communicates through a stable C ABI resolved dynamically.
+
+Apps that actually embed `AICoreKitCoreAIRuntime.framework` should additionally depend on the `AIProviderCoreAIWeakLink` product and use `WeakLinkedCoreAIBridge`. That optional module carries the tiny weak C reference needed to preserve the runtime framework load command when dead stripping is enabled.
 
 The higher-minimum implementation lives in the nested `Runtime/CoreAIRuntime` package, which requires iOS/macOS 27 and Apple's `CoreAILM` runtime. Model assets are supplied by the host and are not bundled in AICoreKit.
 

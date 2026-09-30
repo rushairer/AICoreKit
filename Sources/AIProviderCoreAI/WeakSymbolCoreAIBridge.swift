@@ -1,5 +1,4 @@
 import AICore
-import AICoreWeakBridgeShim
 import Darwin
 
 public struct WeakSymbolCoreAIBridge: CoreAIModelLifecycleBridge {
@@ -23,16 +22,6 @@ public struct WeakSymbolCoreAIBridge: CoreAIModelLifecycleBridge {
     public func availability() async -> AIAvailability {
         guard Self.runtimeOSAvailable else {
             return .unavailable(.unsupportedPlatform)
-        }
-
-        if availabilitySymbol == "AICKCoreAIIsAvailable" {
-            guard AICKCoreAIWeakSymbolPresent() != 0 else {
-                return .unavailable(.frameworkUnavailable)
-            }
-
-            return AICKCoreAIWeakIsAvailable() != 0
-                ? .available
-                : .unavailable(.serviceUnavailable)
         }
 
         guard let function = resolveAvailabilityFunction() else {

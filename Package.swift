@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "AITools", targets: ["AITools"]),
         .library(name: "AIProviderApple", targets: ["AIProviderApple"]),
         .library(name: "AIProviderCoreAI", targets: ["AIProviderCoreAI"]),
+        .library(name: "AIProviderCoreAIWeakLink", targets: ["AIProviderCoreAIWeakLink"]),
         .library(name: "AICoreKit", targets: ["AICoreKit"])
     ],
     targets: [
@@ -24,10 +25,11 @@ let package = Package(
             name: "AICoreWeakBridgeShim",
             publicHeadersPath: "include"
         ),
+        .target(name: "AIProviderCoreAI", dependencies: ["AICore"]),
         .target(
-            name: "AIProviderCoreAI",
+            name: "AIProviderCoreAIWeakLink",
             dependencies: [
-                "AICore",
+                "AIProviderCoreAI",
                 "AICoreWeakBridgeShim"
             ]
         ),
