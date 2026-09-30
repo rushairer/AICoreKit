@@ -419,13 +419,24 @@ public struct GeminiProvider: AIProvider {
             )
         }
 
-        let text = interaction.steps?
-            .filter { $0.type == "model_output" }
-            .flatMap { $0.content ?? [] }
-            .filter { $0.type == "text" }
-            .compactMap(\.text)
-            .joined()
-            ?? ""
+        var text = ""
+
+        for step in interaction.steps ?? [] {
+            guard step.type == "model_output" else {
+                continue
+            }
+
+            for content in step.content ?? [] {
+                guard
+                    content.type == "text",
+                    let value = content.text
+                else {
+                    continue
+                }
+
+                text += value
+            }
+        }
 
         guard !text.isEmpty else {
             throw AIError.decodingFailure(
@@ -433,7 +444,11 @@ public struct GeminiProvider: AIProvider {
             )
         }
 
-        guard let data = text.data(using: .utf8) else {
+        guard
+            let data = text.data(
+                using: String.Encoding.utf8
+            )
+        else {
             throw AIError.decodingFailure(
                 "Gemini structured response was not UTF-8"
             )
