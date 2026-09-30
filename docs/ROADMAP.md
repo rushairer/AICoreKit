@@ -29,7 +29,7 @@
 - [x] True OpenAI-compatible SSE streaming.
 - [x] Anthropic provider.
 - [x] Gemini provider.
-- [ ] Dedicated OpenAI provider where vendor-specific features justify it.
+- [x] Dedicated OpenAI Responses API provider.
 - [ ] Gateway-oriented credential examples and retry/observability hooks.
 
 ## 0.4 Structured generation and tools

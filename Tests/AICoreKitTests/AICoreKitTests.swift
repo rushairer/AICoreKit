@@ -1144,3 +1144,258 @@ extension AICoreKitTests {
         XCTAssertEqual(response.usage?.inputTokens, 3)
     }
 }
+
+
+import AIProviderOpenAI
+
+extension AICoreKitTests {
+    func testOpenAIProviderGeneratesResponsesAPIText() async throws {
+        let responseData = """
+        {
+          "status": "completed",
+          "output": [
+            {
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "hello from OpenAI"
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "total_tokens": 15
+          },
+          "incomplete_details": null,
+          "error": null
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(
+                model: "fixture-openai",
+                baseURL: URL(
+                    string: "https://openai.example/v1"
+                )!,
+                defaultMaxOutputTokens: 128
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "openai-token"
+            ),
+            transport: transport
+        )
+
+        let response = try await provider.generate(
+            AIRequest(
+                messages: [
+                    .system("Be concise."),
+                    .user("hello")
+                ]
+            )
+        )
+
+        XCTAssertEqual(response.text, "hello from OpenAI")
+        XCTAssertEqual(response.providerID, .openAI)
+        XCTAssertEqual(response.usage?.inputTokens, 10)
+        XCTAssertEqual(response.usage?.outputTokens, 5)
+
+        let capturedRequest = await transport.lastRequest()
+        XCTAssertEqual(
+            capturedRequest?.url?.absoluteString,
+            "https://openai.example/v1/responses"
+        )
+        XCTAssertEqual(
+            capturedRequest?.value(
+                forHTTPHeaderField: "Authorization"
+            ),
+            "Bearer openai-token"
+        )
+
+        let bodyData = try XCTUnwrap(
+            capturedRequest?.httpBody
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            body["model"] as? String,
+            "fixture-openai"
+        )
+        XCTAssertEqual(
+            body["max_output_tokens"] as? Int,
+            128
+        )
+        XCTAssertEqual(
+            body["stream"] as? Bool,
+            false
+        )
+        XCTAssertEqual(
+            body["store"] as? Bool,
+            false
+        )
+        XCTAssertNil(body["temperature"])
+
+        let input = try XCTUnwrap(
+            body["input"] as? [[String: Any]]
+        )
+        XCTAssertEqual(input.count, 2)
+        XCTAssertEqual(
+            input.first?["role"] as? String,
+            "system"
+        )
+    }
+
+    func testOpenAIProviderStreamsResponsesAPIEvents() async throws {
+        let terminalResponse = """
+        {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":7,"output_tokens":2},"incomplete_details":null,"error":null}}
+        """
+
+        let transport = RecordingStreamingHTTPTransport(
+            streamLines: [
+                "event: response.output_text.delta",
+                "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hel\"}",
+                "",
+                "event: response.output_text.delta",
+                "data: {\"type\":\"response.output_text.delta\",\"delta\":\"lo\"}",
+                "",
+                "event: response.completed",
+                "data: \(terminalResponse)",
+                ""
+            ]
+        )
+
+        let provider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(
+                model: "fixture-openai",
+                baseURL: URL(
+                    string: "https://openai.example/v1"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "openai-token"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(.streaming)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.toolCalling)
+        )
+        XCTAssertFalse(
+            provider.capabilities.contains(.structuredGeneration)
+        )
+
+        var deltas: [String] = []
+        var usage: AIUsage?
+        var completed: AIResponse?
+
+        for try await event in provider.stream(
+            AIRequest(
+                messages: [.user("hello")],
+                requiredCapabilities: [
+                    .textGeneration,
+                    .streaming
+                ]
+            )
+        ) {
+            switch event {
+            case .textDelta(let delta):
+                deltas.append(delta)
+            case .usage(let value):
+                usage = value
+            case .completed(let response):
+                completed = response
+            case .toolCall:
+                XCTFail("Unexpected tool call")
+            }
+        }
+
+        XCTAssertEqual(deltas, ["hel", "lo"])
+        XCTAssertEqual(completed?.text, "hello")
+        XCTAssertEqual(completed?.finishReason, .completed)
+        XCTAssertEqual(usage?.inputTokens, 7)
+        XCTAssertEqual(usage?.outputTokens, 2)
+
+        let capturedRequest = await transport.lastRequest()
+        let bodyData = try XCTUnwrap(
+            capturedRequest?.httpBody
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+        XCTAssertEqual(body["stream"] as? Bool, true)
+        XCTAssertEqual(body["store"] as? Bool, false)
+    }
+
+    func testOpenAIProviderMapsIncompleteMaxOutput() async throws {
+        let responseData = """
+        {
+          "status": "incomplete",
+          "output": [
+            {
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "partial"
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "input_tokens": 3,
+            "output_tokens": 8
+          },
+          "incomplete_details": {
+            "reason": "max_output_tokens"
+          },
+          "error": null
+        }
+        """.data(using: .utf8)!
+
+        let provider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(
+                model: "fixture-openai",
+                baseURL: URL(
+                    string: "https://openai.example/v1"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "openai-token"
+            ),
+            transport: RecordingHTTPTransport(
+                response: AIHTTPResponse(
+                    data: responseData,
+                    statusCode: 200
+                )
+            )
+        )
+
+        let response = try await provider.generate(
+            AIRequest(messages: [.user("hello")])
+        )
+
+        XCTAssertEqual(response.text, "partial")
+        XCTAssertEqual(
+            response.finishReason,
+            .maxOutputReached
+        )
+    }
+}

@@ -18,6 +18,7 @@ let package = Package(
         .library(name: "AIProviderOpenAICompatible", targets: ["AIProviderOpenAICompatible"]),
         .library(name: "AIProviderAnthropic", targets: ["AIProviderAnthropic"]),
         .library(name: "AIProviderGemini", targets: ["AIProviderGemini"]),
+        .library(name: "AIProviderOpenAI", targets: ["AIProviderOpenAI"]),
         .library(name: "AICoreKit", targets: ["AICoreKit"])
     ],
     targets: [
@@ -60,6 +61,13 @@ let package = Package(
             ]
         ),
         .target(
+            name: "AIProviderOpenAI",
+            dependencies: [
+                "AICore",
+                "AIHTTP"
+            ]
+        ),
+        .target(
             name: "AICoreKit",
             dependencies: [
                 "AICore",
@@ -80,7 +88,8 @@ let package = Package(
                 "AIProviderCoreAI",
                 "AIProviderOpenAICompatible",
                 "AIProviderAnthropic",
-                "AIProviderGemini"
+                "AIProviderGemini",
+                "AIProviderOpenAI"
             ]
         )
     ]

@@ -96,3 +96,27 @@ The provider:
 - uses `streamGenerateContent?alt=sse` for streaming;
 - leaves temperature unset by default;
 - exposes only normalized text and streaming capabilities for now, even though Gemini can support additional media and tool features.
+
+
+## OpenAI provider
+
+`AIProviderOpenAI` is the vendor-specific OpenAI adapter. Unlike `AIProviderOpenAICompatible`, it targets the Responses API rather than emulating Chat Completions.
+
+```swift
+let provider = OpenAIProvider(
+    configuration: OpenAIProviderConfiguration(
+        model: "gpt-5"
+    ),
+    credentialProvider: credentials
+)
+```
+
+The provider:
+
+- uses `POST /v1/responses`;
+- authenticates with a Bearer token;
+- explicitly defaults `store` to `false`;
+- maps AICore system, user, and assistant history into Responses API input messages;
+- streams normalized text deltas from `response.output_text.delta`;
+- derives completion state and usage from terminal Responses API events;
+- deliberately leaves tool calling and structured generation for AICoreKit's cross-provider normalization layer.
