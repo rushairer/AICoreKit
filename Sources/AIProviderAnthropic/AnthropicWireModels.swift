@@ -7,6 +7,7 @@ struct AnthropicMessageRequest: Encodable, Sendable {
     let system: String?
     let temperature: Double?
     let stream: Bool
+    let outputConfig: OutputConfiguration?
 
     enum CodingKeys: String, CodingKey {
         case model
@@ -15,6 +16,25 @@ struct AnthropicMessageRequest: Encodable, Sendable {
         case system
         case temperature
         case stream
+        case outputConfig = "output_config"
+    }
+
+    struct OutputConfiguration: Encodable, Sendable {
+        let format: Format
+
+        struct Format: Encodable, Sendable {
+            let type: String
+            let schema: AIJSONValue
+
+            init(schema: AIStructuredOutputSchema) {
+                type = "json_schema"
+                self.schema = schema.schema
+            }
+        }
+
+        init(schema: AIStructuredOutputSchema) {
+            format = Format(schema: schema)
+        }
     }
 }
 

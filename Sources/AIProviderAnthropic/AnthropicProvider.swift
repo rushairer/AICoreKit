@@ -29,6 +29,7 @@ public struct AnthropicProvider: AIProvider {
     public var capabilities: AICapabilities {
         var capabilities: AICapabilities = [
             .textGeneration,
+            .structuredGeneration,
             .remoteExecution,
             .requiresNetwork
         ]
@@ -68,7 +69,8 @@ public struct AnthropicProvider: AIProvider {
 
         let urlRequest = try await makeURLRequest(
             for: request,
-            stream: false
+            stream: false,
+            structuredSchema: nil
         )
 
         let response: AIHTTPResponse
@@ -135,7 +137,8 @@ public struct AnthropicProvider: AIProvider {
 
                     let urlRequest = try await makeURLRequest(
                         for: request,
-                        stream: true
+                        stream: true,
+                        structuredSchema: nil
                     )
 
                     let response: AIHTTPLineStreamResponse
@@ -368,9 +371,105 @@ public struct AnthropicProvider: AIProvider {
         }
     }
 
+    public func generateStructured<Output: Decodable & Sendable>(
+        _ request: AIStructuredRequest<Output>
+    ) async throws -> Output {
+        guard capabilities.satisfies(
+            request.requiredCapabilities
+        ) else {
+            throw AIError.unsupportedCapability
+        }
+
+        guard let schema = request.schema else {
+            throw AIError.invalidRequest(
+                "Anthropic structured generation requires a JSON schema"
+            )
+        }
+
+        let baseRequest = AIRequest(
+            messages: [
+                .system(request.instructions),
+                .user(request.input)
+            ],
+            requiredCapabilities: [.textGeneration],
+            executionPreference: request.executionPreference,
+            metadata: request.metadata,
+            maxOutputTokens: request.maxOutputTokens,
+            temperature: request.temperature
+        )
+
+        let urlRequest = try await makeURLRequest(
+            for: baseRequest,
+            stream: false,
+            structuredSchema: schema
+        )
+
+        let response: AIHTTPResponse
+        do {
+            response = try await transport.data(
+                for: urlRequest
+            )
+        } catch is CancellationError {
+            throw AIError.cancelled
+        } catch {
+            throw AIError.transportFailure(
+                error.localizedDescription
+            )
+        }
+
+        try validateHTTPStatus(
+            response.statusCode,
+            data: response.data
+        )
+
+        let decoded: AnthropicMessageResponse
+        do {
+            decoded = try JSONDecoder().decode(
+                AnthropicMessageResponse.self,
+                from: response.data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+
+        guard
+            finishReason(from: decoded.stopReason) == .completed
+        else {
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "Anthropic structured response did not complete"
+            )
+        }
+
+        let text = decoded.content
+            .filter { $0.type == "text" }
+            .compactMap(\.text)
+            .joined()
+
+        guard let data = text.data(using: .utf8) else {
+            throw AIError.decodingFailure(
+                "Anthropic structured response was not UTF-8"
+            )
+        }
+
+        do {
+            return try JSONDecoder().decode(
+                Output.self,
+                from: data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+    }
+
     private func makeURLRequest(
         for request: AIRequest,
-        stream: Bool
+        stream: Bool,
+        structuredSchema: AIStructuredOutputSchema?
     ) async throws -> URLRequest {
         guard let endpointURL else {
             throw AIError.invalidRequest(
@@ -411,7 +510,12 @@ public struct AnthropicProvider: AIProvider {
             temperature:
                 request.temperature
                 ?? configuration.defaultTemperature,
-            stream: stream
+            stream: stream,
+            outputConfig: structuredSchema.map {
+                AnthropicMessageRequest.OutputConfiguration(
+                    schema: $0
+                )
+            }
         )
 
         var urlRequest = URLRequest(url: endpointURL)

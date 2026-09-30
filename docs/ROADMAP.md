@@ -34,7 +34,7 @@
 
 ## 0.4 Structured generation and tools
 
-- [ ] Provider-native structured output adapters. (OpenAI Responses complete; Anthropic and Gemini pending.)
+- [ ] Provider-native structured output adapters. (OpenAI Responses and Anthropic complete; Gemini pending.)
 - [ ] Tool-call normalization across providers.
 - [ ] Multi-turn tool orchestration.
 - [ ] Confirmation policies for mutating and destructive tools.

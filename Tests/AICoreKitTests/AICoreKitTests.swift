@@ -1537,3 +1537,106 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testAnthropicProviderGeneratesNativeStructuredOutput() async throws {
+        let responseData = """
+        {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\\\"name\\\":\\\"Ada\\\",\\\"age\\\":36}"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 8
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(
+                model: "fixture-claude",
+                baseURL: URL(
+                    string: "https://anthropic.example/v1"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "anthropic-key"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(
+                .structuredGeneration
+            )
+        )
+
+        let schema = try AIStructuredOutputSchema(
+            name: "contact",
+            schemaJSON: """
+            {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"}
+              },
+              "required": ["name", "age"],
+              "additionalProperties": false
+            }
+            """
+        )
+
+        let value: StructuredContactFixture =
+            try await provider.generateStructured(
+                AIStructuredRequest(
+                    instructions: "Extract the contact.",
+                    input: "Ada is 36.",
+                    schema: schema,
+                    outputType: StructuredContactFixture.self
+                )
+            )
+
+        XCTAssertEqual(
+            value,
+            StructuredContactFixture(
+                name: "Ada",
+                age: 36
+            )
+        )
+
+        let capturedRequest = await transport.lastRequest()
+        let bodyData = try XCTUnwrap(
+            capturedRequest?.httpBody
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+        let outputConfig = try XCTUnwrap(
+            body["output_config"] as? [String: Any]
+        )
+        let format = try XCTUnwrap(
+            outputConfig["format"] as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            format["type"] as? String,
+            "json_schema"
+        )
+        XCTAssertNotNil(
+            format["schema"] as? [String: Any]
+        )
+    }
+}
