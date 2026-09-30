@@ -2,3 +2,4 @@
 @_exported import AIOrchestration
 @_exported import AITools
 @_exported import AIProviderApple
+@_exported import AIProviderCoreAI

@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "AIOrchestration", targets: ["AIOrchestration"]),
         .library(name: "AITools", targets: ["AITools"]),
         .library(name: "AIProviderApple", targets: ["AIProviderApple"]),
+        .library(name: "AIProviderCoreAI", targets: ["AIProviderCoreAI"]),
         .library(name: "AICoreKit", targets: ["AICoreKit"])
     ],
     targets: [
@@ -19,13 +20,26 @@ let package = Package(
         .target(name: "AIOrchestration", dependencies: ["AICore"]),
         .target(name: "AITools", dependencies: ["AICore"]),
         .target(name: "AIProviderApple", dependencies: ["AICore"]),
+        .target(name: "AIProviderCoreAI", dependencies: ["AICore"]),
         .target(
             name: "AICoreKit",
-            dependencies: ["AICore", "AIOrchestration", "AITools", "AIProviderApple"]
+            dependencies: [
+                "AICore",
+                "AIOrchestration",
+                "AITools",
+                "AIProviderApple",
+                "AIProviderCoreAI"
+            ]
         ),
         .testTarget(
             name: "AICoreKitTests",
-            dependencies: ["AICore", "AIOrchestration", "AITools", "AIProviderApple"]
+            dependencies: [
+                "AICore",
+                "AIOrchestration",
+                "AITools",
+                "AIProviderApple",
+                "AIProviderCoreAI"
+            ]
         )
     ]
 )

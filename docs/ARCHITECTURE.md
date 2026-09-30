@@ -10,6 +10,17 @@ AICoreKit separates product AI concerns from runtime and provider concerns.
 4. Provider modules adapt vendor or platform APIs to AICore.
 5. Product applications own prompts, domain models, validation, and business actions.
 
+## Local runtime boundary
+
+`AIProviderCoreAI` is deliberately host-safe. It does not import `CoreAILanguageModels` and therefore does not force the base Swift package to adopt the Core AI runtime's higher deployment target.
+
+The provider depends on two injected abstractions:
+
+- `CoreAIBridge` — availability and generation across the runtime boundary.
+- `CoreAIModelResourceProviding` — host-owned model resource resolution.
+
+The live iOS implementation will use the weak C ABI documented under `CompatibilityLab/`. The higher-minimum Swift runtime stays isolated in an iOS 27-only framework target.
+
 ## Non-goals
 
 AICoreKit does not own product prompts, app state, persistence, billing policy, or product-specific domain facts.

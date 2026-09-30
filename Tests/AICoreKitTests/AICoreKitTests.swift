@@ -1,6 +1,8 @@
 import AICore
 import AIOrchestration
+import AIProviderCoreAI
 import AITools
+import Foundation
 import XCTest
 
 private struct StubProvider: AIProvider {
@@ -30,6 +32,22 @@ private struct EchoTool: AITool {
 
     func execute(argumentsJSON: String) async throws -> AIToolResult {
         AIToolResult(toolName: definition.name, content: argumentsJSON)
+    }
+}
+
+private struct StubCoreAIBridge: CoreAIBridge {
+    let bridgeAvailability: AIAvailability
+    let invocation: CoreAIBridgeInvocation
+
+    func availability() async -> AIAvailability {
+        bridgeAvailability
+    }
+
+    func generate(
+        requestJSON: String,
+        modelPath: String
+    ) async -> CoreAIBridgeInvocation {
+        invocation
     }
 }
 
@@ -92,5 +110,80 @@ final class AICoreKitTests: XCTestCase {
         try await registry.register(EchoTool())
         let definitions = await registry.definitions()
         XCTAssertEqual(definitions.map(\.name), ["echo"])
+    }
+
+    func testCoreAIProviderReportsMissingModel() async {
+        let provider = CoreAIProvider(
+            bridge: StubCoreAIBridge(
+                bridgeAvailability: .available,
+                invocation: CoreAIBridgeInvocation(status: .success)
+            ),
+            resourceProvider: StaticCoreAIModelResourceProvider(resource: nil)
+        )
+
+        XCTAssertEqual(
+            await provider.availability(),
+            .unavailable(.modelMissing)
+        )
+    }
+
+    func testCoreAIProviderDecodesGenericResponse() async throws {
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try Data().write(to: temporaryURL)
+        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+
+        let responseJSON = """
+        {
+          "text": "local response",
+          "finishReason": "completed",
+          "inputTokens": 12,
+          "outputTokens": 4
+        }
+        """
+
+        let provider = CoreAIProvider(
+            bridge: StubCoreAIBridge(
+                bridgeAvailability: .available,
+                invocation: CoreAIBridgeInvocation(
+                    status: .success,
+                    responseJSON: responseJSON
+                )
+            ),
+            resourceProvider: StaticCoreAIModelResourceProvider(
+                resource: CoreAIModelResource(
+                    identifier: "fixture",
+                    path: temporaryURL.path
+                )
+            )
+        )
+
+        let response = try await provider.generate(
+            AIRequest(messages: [.user("hello")])
+        )
+
+        XCTAssertEqual(response.text, "local response")
+        XCTAssertEqual(response.providerID, .coreAI)
+        XCTAssertEqual(response.usage?.inputTokens, 12)
+        XCTAssertEqual(response.usage?.outputTokens, 4)
+    }
+
+    func testCoreAIProviderRejectsUnsupportedCapability() async throws {
+        let provider = CoreAIProvider(
+            bridge: UnavailableCoreAIBridge(),
+            resourceProvider: StaticCoreAIModelResourceProvider(resource: nil)
+        )
+
+        do {
+            _ = try await provider.generate(
+                AIRequest(
+                    messages: [.user("hello")],
+                    requiredCapabilities: [.textGeneration, .toolCalling]
+                )
+            )
+            XCTFail("Expected unsupported capability")
+        } catch let error as AIError {
+            XCTAssertEqual(error, .unsupportedCapability)
+        }
     }
 }
