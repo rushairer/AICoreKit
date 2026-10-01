@@ -829,7 +829,7 @@ extension AICoreKitTests {
         XCTAssertTrue(
             provider.capabilities.contains(.streaming)
         )
-        XCTAssertFalse(
+        XCTAssertTrue(
             provider.capabilities.contains(.toolCalling)
         )
 
@@ -1041,7 +1041,7 @@ extension AICoreKitTests {
         XCTAssertTrue(
             provider.capabilities.contains(.streaming)
         )
-        XCTAssertFalse(
+        XCTAssertTrue(
             provider.capabilities.contains(.toolCalling)
         )
         XCTAssertFalse(
@@ -1293,7 +1293,7 @@ extension AICoreKitTests {
         XCTAssertTrue(
             provider.capabilities.contains(.streaming)
         )
-        XCTAssertFalse(
+        XCTAssertTrue(
             provider.capabilities.contains(.toolCalling)
         )
         XCTAssertTrue(
@@ -1895,7 +1895,7 @@ extension AICoreKitTests {
         )
         XCTAssertEqual(
             response.toolCalls.first?.argumentsJSON,
-            "{\\\"location\\\":\\\"Paris\\\"}"
+            #"{"location":"Paris"}"#
         )
 
         let request = await transport.lastRequest()
@@ -1988,7 +1988,7 @@ extension AICoreKitTests {
         )
         XCTAssertEqual(
             response.toolCalls.first?.argumentsJSON,
-            "{\\\"location\\\":\\\"Paris\\\"}"
+            #"{"location":"Paris"}"#
         )
 
         let request = await transport.lastRequest()
@@ -2077,7 +2077,7 @@ extension AICoreKitTests {
         )
         XCTAssertEqual(
             response.toolCalls.first?.argumentsJSON,
-            "{\\\"location\\\":\\\"Paris\\\"}"
+            #"{"location":"Paris"}"#
         )
 
         let request = await transport.lastRequest()
