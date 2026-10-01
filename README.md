@@ -119,7 +119,7 @@ See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for platform minimums, provid
 
 See [docs/VERSIONING.md](docs/VERSIONING.md) for the SemVer, API stability, deprecation, and Core AI ABI policy.
 
-Migration plans for the first target consumers are documented in [docs/MIGRATION_COLORCAMERA.md](docs/MIGRATION_COLORCAMERA.md) and [docs/MIGRATION_FATEATLAS.md](docs/MIGRATION_FATEATLAS.md).
+Migration plans for the target consumers are documented in [docs/MIGRATION_COLORCAMERA.md](docs/MIGRATION_COLORCAMERA.md), [docs/MIGRATION_FATEATLAS.md](docs/MIGRATION_FATEATLAS.md), and [docs/MIGRATION_METRONOMEPRO.md](docs/MIGRATION_METRONOMEPRO.md). The production-consumer acceptance criteria live in [docs/CONSUMERS.md](docs/CONSUMERS.md).
 
 ## Roadmap
 
