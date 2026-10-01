@@ -4,7 +4,7 @@ AICoreKit is a Swift AI runtime and provider abstraction for Apple-platform appl
 
 It is designed around capabilities rather than vendors, so product code can use a stable API while execution is routed across system, on-device, and cloud AI providers.
 
-> Status: early development. Public API is not stable yet.
+> Status: pre-1.0 stabilization. The 1.0 compatibility contract is defined, but public API may still change before the first 1.0.0 tag.
 
 ## Goals
 
@@ -116,6 +116,8 @@ swift test
 ## Compatibility
 
 See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for platform minimums, provider capability support, and the conformance contract.
+
+See [docs/VERSIONING.md](docs/VERSIONING.md) for the SemVer, API stability, deprecation, and Core AI ABI policy.
 
 ## Roadmap
 
