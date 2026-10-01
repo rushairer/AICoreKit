@@ -10,7 +10,7 @@ The target is three production consumers with deliberately different workloads.
 | --- | --- | --- | --- |
 | ColorCamera | Existing Apple Foundation Models + product-specific Core AI/Qwen implementation | Gradual migration of reusable provider/runtime infrastructure | iOS 26 host / iOS 27 local runtime, weak link, resource lifecycle, local fallback |
 | FateAtlas | Existing internal `AppAIKit` with Apple/cloud providers | Replace duplicated generic AI package with AICoreKit | cloud providers, user-selected endpoints, structured generation, streaming/fallback |
-| MetronomePro | Deterministic Practice/DSP/DigitalScore foundations; generative coach planned | New AI Practice Coach and natural-language actions | evidence-grounded generation, tool calling, local/cloud routing |
+| MetronomePro | AICoreKit pinned in PracticeFeature; on-demand AI Practice Coach path implemented on main, build/archive verification pending | New AI Practice Coach and natural-language actions | evidence-grounded generation, tool calling, local/cloud routing |
 
 ## What counts as a production consumer
 
@@ -64,6 +64,14 @@ Recommended validation scope:
 - local-first with optional cloud fallback.
 
 MetronomePro must preserve the architectural rule that generative AI interprets deterministic evidence rather than generating the evidence itself.
+
+Current adoption evidence as of 2026-10-01:
+
+- MetronomePro main `578baf32` pins AICoreKit revision `90ccfa36` in `PracticeFeature` and adds the evidence-grounded Practice Coach service plus product-level evidence-boundary tests.
+- MetronomePro main `4209f9e1` adds the user-visible, on-demand Practice Session Detail review path and complete Practice Coach localization coverage for the existing 15 PracticeFeature locales.
+- The generated review is ephemeral, cancellable, and cannot mutate Practice facts, Estimated Effective Time, goals, streaks, achievements, or leaderboard data.
+- GitHub Actions does not currently provide build/archive evidence for this integration because `METRONOMEPRO_CI_READ_TOKEN` is not configured; the workflow therefore skips targets that require the private `MetronomeEngine` dependency.
+- Until a real PracticeFeature build/test and production/Release archive succeed, MetronomePro does **not** count as a completed production consumer.
 
 See `MIGRATION_METRONOMEPRO.md`.
 
