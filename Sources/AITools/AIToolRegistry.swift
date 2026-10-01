@@ -31,7 +31,9 @@ public actor AIToolRegistry {
 
     public func execute(
         _ call: AIToolCall,
-        policy: any AIToolExecutionPolicy
+        policy: any AIToolExecutionPolicy,
+        confirmationProvider:
+            (any AIToolConfirmationProviding)? = nil
     ) async throws -> AIToolOutput {
         guard let tool = toolsByName[call.name] else {
             throw AIError.toolExecutionFailed(
@@ -39,11 +41,65 @@ public actor AIToolRegistry {
             )
         }
 
-        guard await policy.canExecute(tool.definition) else {
+        let executionRequest = AIToolExecutionRequest(
+            call: call,
+            definition: tool.definition
+        )
+
+        let decision = await policy.decision(
+            for: executionRequest
+        )
+
+        switch decision {
+        case .allow:
+            break
+
+        case .deny(let reason):
+            let suffix = reason.map {
+                ": " + $0
+            } ?? ""
+
             throw AIError.toolExecutionFailed(
                 "Tool \(call.name) is blocked by the execution policy"
+                + suffix
             )
+
+        case .requireConfirmation:
+            guard let confirmationProvider else {
+                throw AIError.toolConfirmationRequired(
+                    toolName: call.name,
+                    callID: call.id
+                )
+            }
+
+            let confirmation: AIToolConfirmationDecision
+            do {
+                confirmation =
+                    try await confirmationProvider.confirm(
+                        executionRequest
+                    )
+            } catch is CancellationError {
+                throw AIError.cancelled
+            } catch let error as AIError {
+                throw error
+            } catch {
+                throw AIError.toolExecutionFailed(
+                    "Tool confirmation failed for "
+                    + call.name
+                    + ": "
+                    + error.localizedDescription
+                )
+            }
+
+            guard confirmation == .approved else {
+                throw AIError.toolConfirmationDenied(
+                    toolName: call.name,
+                    callID: call.id
+                )
+            }
         }
+
+        try Task.checkCancellation()
 
         let result: AIToolResult
         do {
@@ -68,7 +124,9 @@ public actor AIToolRegistry {
 
     public func execute(
         _ calls: [AIToolCall],
-        policy: any AIToolExecutionPolicy
+        policy: any AIToolExecutionPolicy,
+        confirmationProvider:
+            (any AIToolConfirmationProviding)? = nil
     ) async throws -> [AIToolOutput] {
         var outputs: [AIToolOutput] = []
         outputs.reserveCapacity(calls.count)
@@ -77,7 +135,9 @@ public actor AIToolRegistry {
             outputs.append(
                 try await execute(
                     call,
-                    policy: policy
+                    policy: policy,
+                    confirmationProvider:
+                        confirmationProvider
                 )
             )
         }

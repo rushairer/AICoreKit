@@ -53,3 +53,17 @@ Providers return normalized `AIToolCall` values. If a response requires another 
 `DefaultAIOrchestrator.respondWithTools` keeps provider affinity after the first successful model response, executes registered tools sequentially through `AIToolRegistry`, and asks the same `AIToolContinuingProvider` to continue. Provider fallback is allowed only before a provider has successfully produced the first response; this avoids replaying tool side effects against a different model after execution begins.
 
 The default execution policy permits only read-only tools that do not require user confirmation. Mutating, network, destructive, or confirmation-required tools remain blocked unless the application injects a more permissive policy.
+
+
+## Tool execution confirmation
+
+Tool execution uses two independent application-owned controls:
+
+1. An `AIToolExecutionPolicy` classifies each concrete tool call as `allow`, `deny`, or `requireConfirmation`.
+2. An optional `AIToolConfirmationProviding` implementation performs the product-specific confirmation interaction when required.
+
+The default `ReadOnlyAIToolExecutionPolicy` continues to auto-run only read-only tools. It never permits mutating, network, or destructive tools. `UserConfirmationAIToolExecutionPolicy` auto-runs ordinary read-only tools and requires confirmation for side-effecting tools or any tool explicitly marked `requiresUserConfirmation`.
+
+AICoreKit does not render alerts or decide consent UX. Applications inject confirmation UI through `AIToolConfirmationProviding`, which receives both the normalized `AIToolCall` (including arguments) and its `AIToolDefinition`. Missing or denied confirmation is represented by explicit `AIError.toolConfirmationRequired` and `AIError.toolConfirmationDenied` values.
+
+This keeps model intent, authorization policy, user consent, and business execution as separate boundaries.

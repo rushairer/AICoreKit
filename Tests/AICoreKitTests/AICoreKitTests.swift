@@ -2852,3 +2852,200 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+private actor RecordingToolConfirmationProvider:
+    AIToolConfirmationProviding
+{
+    private let decision:
+        AIToolConfirmationDecision
+    private var requests:
+        [AIToolExecutionRequest] = []
+
+    init(
+        decision: AIToolConfirmationDecision
+    ) {
+        self.decision = decision
+    }
+
+    func confirm(
+        _ request: AIToolExecutionRequest
+    ) async throws -> AIToolConfirmationDecision {
+        requests.append(request)
+        return decision
+    }
+
+    func capturedRequests()
+        -> [AIToolExecutionRequest]
+    {
+        requests
+    }
+}
+
+extension AICoreKitTests {
+    func testConfirmingPolicyExecutesApprovedMutation() async throws {
+        let provider =
+            MutatingToolLoopStubProvider()
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+        let tool = MutatingFixtureTool()
+        let toolRegistry = AIToolRegistry(
+            tools: [tool]
+        )
+        let confirmation =
+            RecordingToolConfirmationProvider(
+                decision: .approved
+            )
+
+        let response = try await orchestrator.respondWithTools(
+            to: AIRequest(
+                messages: [.user("mutate")],
+                tools: [tool.definition]
+            ),
+            toolRegistry: toolRegistry,
+            executionPolicy:
+                UserConfirmationAIToolExecutionPolicy(),
+            confirmationProvider: confirmation
+        )
+
+        XCTAssertEqual(
+            response.text,
+            "unexpected"
+        )
+
+        let requests =
+            await confirmation.capturedRequests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(
+            requests.first?.call.id,
+            "call-mutate"
+        )
+        XCTAssertEqual(
+            requests.first?.definition.sideEffectLevel,
+            .localMutation
+        )
+    }
+
+    func testConfirmingPolicyRejectsDeniedMutation() async throws {
+        let provider =
+            MutatingToolLoopStubProvider()
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+        let tool = MutatingFixtureTool()
+        let toolRegistry = AIToolRegistry(
+            tools: [tool]
+        )
+        let confirmation =
+            RecordingToolConfirmationProvider(
+                decision: .denied
+            )
+
+        do {
+            _ = try await orchestrator.respondWithTools(
+                to: AIRequest(
+                    messages: [.user("mutate")],
+                    tools: [tool.definition]
+                ),
+                toolRegistry: toolRegistry,
+                executionPolicy:
+                    UserConfirmationAIToolExecutionPolicy(),
+                confirmationProvider: confirmation
+            )
+            XCTFail(
+                "Expected confirmation denial"
+            )
+        } catch let error as AIError {
+            XCTAssertEqual(
+                error,
+                .toolConfirmationDenied(
+                    toolName: "mutate",
+                    callID: "call-mutate"
+                )
+            )
+        }
+    }
+
+    func testConfirmingPolicyReportsMissingConfirmationProvider() async throws {
+        let provider =
+            MutatingToolLoopStubProvider()
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+        let tool = MutatingFixtureTool()
+        let toolRegistry = AIToolRegistry(
+            tools: [tool]
+        )
+
+        do {
+            _ = try await orchestrator.respondWithTools(
+                to: AIRequest(
+                    messages: [.user("mutate")],
+                    tools: [tool.definition]
+                ),
+                toolRegistry: toolRegistry,
+                executionPolicy:
+                    UserConfirmationAIToolExecutionPolicy()
+            )
+            XCTFail(
+                "Expected confirmation requirement"
+            )
+        } catch let error as AIError {
+            XCTAssertEqual(
+                error,
+                .toolConfirmationRequired(
+                    toolName: "mutate",
+                    callID: "call-mutate"
+                )
+            )
+        }
+    }
+
+    func testConfirmingPolicyDoesNotPromptForReadOnlyTool() async throws {
+        let provider = ToolLoopStubProvider()
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+        let tool = EchoTool()
+        let toolRegistry = AIToolRegistry(
+            tools: [tool]
+        )
+        let confirmation =
+            RecordingToolConfirmationProvider(
+                decision: .denied
+            )
+
+        let response = try await orchestrator.respondWithTools(
+            to: AIRequest(
+                messages: [.user("echo hello")],
+                tools: [tool.definition]
+            ),
+            toolRegistry: toolRegistry,
+            executionPolicy:
+                UserConfirmationAIToolExecutionPolicy(),
+            confirmationProvider: confirmation
+        )
+
+        XCTAssertEqual(
+            response.text,
+            #"{"value":"hello"}"#
+        )
+
+        let requests =
+            await confirmation.capturedRequests()
+        XCTAssertTrue(requests.isEmpty)
+    }
+}

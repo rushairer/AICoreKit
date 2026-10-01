@@ -53,6 +53,8 @@ public actor DefaultAIOrchestrator {
         toolRegistry: AIToolRegistry,
         executionPolicy: any AIToolExecutionPolicy =
             ReadOnlyAIToolExecutionPolicy(),
+        confirmationProvider:
+            (any AIToolConfirmationProviding)? = nil,
         configuration: AIToolLoopConfiguration =
             AIToolLoopConfiguration(),
         fallbackPolicy: AIFallbackPolicy = .enabled
@@ -156,7 +158,9 @@ public actor DefaultAIOrchestrator {
 
             let outputs = try await toolRegistry.execute(
                 currentResponse.toolCalls,
-                policy: executionPolicy
+                policy: executionPolicy,
+                confirmationProvider:
+                    confirmationProvider
             )
 
             currentResponse =
