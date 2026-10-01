@@ -42,6 +42,6 @@
 ## 1.0
 
 - [x] Stable semantic versioning contract.
-- [ ] Migration guides for ColorCamera and FateAtlas.
+- [x] Migration guides for ColorCamera and FateAtlas.
 - [ ] At least three production consumers.
 - [x] Compatibility matrix and provider conformance suite.
