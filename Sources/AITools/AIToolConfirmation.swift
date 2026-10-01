@@ -1,5 +1,3 @@
-public import AICore
-
 public enum AIToolConfirmationDecision:
     Hashable,
     Sendable
