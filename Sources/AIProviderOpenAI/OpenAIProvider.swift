@@ -2,7 +2,7 @@ import AICore
 import AIHTTP
 import Foundation
 
-public struct OpenAIProvider: AIProvider {
+public struct OpenAIProvider: AIToolContinuingProvider {
     public let configuration: OpenAIProviderConfiguration
 
     private let credentialProvider: any AICredentialProviding
@@ -104,10 +104,22 @@ public struct OpenAIProvider: AIProvider {
             )
         }
 
-        return try makeAIResponse(from: response)
+        let normalized = try makeAIResponse(
+            from: response
+        )
+
+        return try attachingToolContinuation(
+            to: normalized,
+            requestData: urlRequest.httpBody,
+            responseData: httpResponse.data
+        )
     }
 
     public func stream(_ request: AIRequest) -> AIResponseStream {
+        if !request.tools.isEmpty {
+            return fallbackStream(request)
+        }
+
         guard
             let streamingTransport =
                 transport as? any AIHTTPStreamingTransport
@@ -287,6 +299,130 @@ public struct OpenAIProvider: AIProvider {
                 task.cancel()
             }
         }
+    }
+
+    public func continueToolCalls(
+        _ continuation: AIToolContinuation,
+        outputs: [AIToolOutput]
+    ) async throws -> AIResponse {
+        guard continuation.providerID == id else {
+            throw AIError.invalidRequest(
+                "OpenAI tool continuation belongs to a different provider"
+            )
+        }
+
+        let state = try decodeToolContinuation(
+            continuation
+        )
+
+        guard
+            let requestData = state.requestJSON.data(
+                using: .utf8
+            ),
+            var requestObject =
+                try JSONSerialization.jsonObject(
+                    with: requestData
+                ) as? [String: Any]
+        else {
+            throw AIError.decodingFailure(
+                "Invalid OpenAI continuation request state"
+            )
+        }
+
+        guard
+            let responseData = state.responseJSON.data(
+                using: .utf8
+            ),
+            let responseObject =
+                try JSONSerialization.jsonObject(
+                    with: responseData
+                ) as? [String: Any],
+            let priorOutput =
+                responseObject["output"] as? [Any]
+        else {
+            throw AIError.decodingFailure(
+                "Invalid OpenAI continuation response state"
+            )
+        }
+
+        guard
+            var input = requestObject["input"] as? [Any]
+        else {
+            throw AIError.decodingFailure(
+                "OpenAI continuation request did not contain input items"
+            )
+        }
+
+        input.append(contentsOf: priorOutput)
+
+        for output in outputs {
+            input.append(
+                [
+                    "type": "function_call_output",
+                    "call_id": output.callID,
+                    "output": output.content
+                ]
+            )
+        }
+
+        requestObject["input"] = input
+        requestObject["stream"] = false
+
+        let nextRequestData: Data
+        do {
+            nextRequestData = try JSONSerialization.data(
+                withJSONObject: requestObject,
+                options: [.sortedKeys]
+            )
+        } catch {
+            throw AIError.invalidRequest(
+                "Failed to encode OpenAI continuation request"
+            )
+        }
+
+        let urlRequest = try await makeRawURLRequest(
+            body: nextRequestData
+        )
+
+        let httpResponse: AIHTTPResponse
+        do {
+            httpResponse = try await transport.data(
+                for: urlRequest
+            )
+        } catch is CancellationError {
+            throw AIError.cancelled
+        } catch {
+            throw AIError.transportFailure(
+                error.localizedDescription
+            )
+        }
+
+        try validateHTTPStatus(
+            httpResponse.statusCode,
+            data: httpResponse.data
+        )
+
+        let response: OpenAIResponseObject
+        do {
+            response = try JSONDecoder().decode(
+                OpenAIResponseObject.self,
+                from: httpResponse.data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+
+        let normalized = try makeAIResponse(
+            from: response
+        )
+
+        return try attachingToolContinuation(
+            to: normalized,
+            requestData: nextRequestData,
+            responseData: httpResponse.data
+        )
     }
 
     private var credentialRequest: AICredentialRequest {
@@ -501,6 +637,33 @@ public struct OpenAIProvider: AIProvider {
         return urlRequest
     }
 
+    private func makeRawURLRequest(
+        body: Data
+    ) async throws -> URLRequest {
+        guard let endpointURL else {
+            throw AIError.invalidRequest(
+                "Invalid OpenAI Responses endpoint URL"
+            )
+        }
+
+        let credential = try await requiredCredential()
+
+        var urlRequest = URLRequest(url: endpointURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = configuration.timeout
+        urlRequest.httpBody = body
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        urlRequest.setValue(
+            authorizationValue(credential),
+            forHTTPHeaderField:
+                configuration.authorizationHeaderName
+        )
+        return urlRequest
+    }
+
     private func requiredCredential() async throws -> String {
         let credential: String
         do {
@@ -680,6 +843,94 @@ public struct OpenAIProvider: AIProvider {
                 : .toolCallRequested,
             usage: usage(from: response.usage)
         )
+    }
+
+    private func attachingToolContinuation(
+        to response: AIResponse,
+        requestData: Data?,
+        responseData: Data
+    ) throws -> AIResponse {
+        guard !response.toolCalls.isEmpty else {
+            return response
+        }
+
+        guard
+            let requestData,
+            let requestJSON = String(
+                data: requestData,
+                encoding: .utf8
+            ),
+            let responseJSON = String(
+                data: responseData,
+                encoding: .utf8
+            )
+        else {
+            throw AIError.decodingFailure(
+                "OpenAI tool continuation state was not UTF-8"
+            )
+        }
+
+        let state = OpenAIToolContinuationState(
+            requestJSON: requestJSON,
+            responseJSON: responseJSON
+        )
+
+        let stateData: Data
+        do {
+            stateData = try JSONEncoder().encode(state)
+        } catch {
+            throw AIError.decodingFailure(
+                "Failed to encode OpenAI tool continuation state"
+            )
+        }
+
+        guard
+            let opaqueState = String(
+                data: stateData,
+                encoding: .utf8
+            )
+        else {
+            throw AIError.decodingFailure(
+                "OpenAI tool continuation state was not UTF-8"
+            )
+        }
+
+        return AIResponse(
+            text: response.text,
+            toolCalls: response.toolCalls,
+            providerID: response.providerID,
+            finishReason: response.finishReason,
+            usage: response.usage,
+            continuation: AIToolContinuation(
+                providerID: id,
+                opaqueState: opaqueState
+            )
+        )
+    }
+
+    private func decodeToolContinuation(
+        _ continuation: AIToolContinuation
+    ) throws -> OpenAIToolContinuationState {
+        guard
+            let data = continuation.opaqueState.data(
+                using: .utf8
+            )
+        else {
+            throw AIError.decodingFailure(
+                "OpenAI tool continuation state was not UTF-8"
+            )
+        }
+
+        do {
+            return try JSONDecoder().decode(
+                OpenAIToolContinuationState.self,
+                from: data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                "Invalid OpenAI tool continuation state"
+            )
+        }
     }
 
     private func finishReason(

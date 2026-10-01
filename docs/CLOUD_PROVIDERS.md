@@ -124,4 +124,5 @@ The provider:
 - streams normalized text deltas from `response.output_text.delta`;
 - derives completion state and usage from terminal Responses API events;
 - supports native JSON-schema structured outputs;
-- maps Responses API `function_call` output items into normalized `AIToolCall` values.
+- maps Responses API `function_call` output items into normalized `AIToolCall` values;
+- supports stateless multi-turn tool continuation with `store=false` by preserving provider-native output items inside opaque continuation state and appending `function_call_output` items on the next turn.

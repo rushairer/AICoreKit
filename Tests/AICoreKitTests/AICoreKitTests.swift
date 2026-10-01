@@ -2305,3 +2305,211 @@ extension AICoreKitTests {
         }
     }
 }
+
+
+private actor SequencedRecordingHTTPTransport:
+    AIHTTPTransport
+{
+    private var responses: [AIHTTPResponse]
+    private var requests: [URLRequest] = []
+
+    init(responses: [AIHTTPResponse]) {
+        self.responses = responses
+    }
+
+    func data(
+        for request: URLRequest
+    ) async throws -> AIHTTPResponse {
+        requests.append(request)
+
+        guard !responses.isEmpty else {
+            throw AIError.transportFailure(
+                "No fixture response remaining"
+            )
+        }
+
+        return responses.removeFirst()
+    }
+
+    func capturedRequests() -> [URLRequest] {
+        requests
+    }
+}
+
+private struct WeatherFixtureTool: AITool {
+    let definition = AIToolDefinition(
+        name: "get_weather",
+        description: "Get current weather.",
+        inputSchemaJSON: """
+        {
+          "type": "object",
+          "properties": {
+            "location": {"type": "string"}
+          },
+          "required": ["location"],
+          "additionalProperties": false
+        }
+        """
+    )
+
+    func execute(
+        argumentsJSON: String
+    ) async throws -> AIToolResult {
+        AIToolResult(
+            toolName: definition.name,
+            content: #"{"temperature":21,"unit":"C"}"#
+        )
+    }
+}
+
+extension AICoreKitTests {
+    func testOpenAIProviderContinuesToolLoopStatelessly() async throws {
+        let firstResponse = """
+        {
+          "status": "completed",
+          "output": [
+            {
+              "id": "rs_1",
+              "type": "reasoning",
+              "summary": []
+            },
+            {
+              "id": "fc_1",
+              "call_id": "call_weather",
+              "type": "function_call",
+              "name": "get_weather",
+              "arguments": "{\\\"location\\\":\\\"Paris\\\"}"
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        }
+        """.data(using: .utf8)!
+
+        let secondResponse = """
+        {
+          "status": "completed",
+          "output": [
+            {
+              "id": "msg_2",
+              "type": "message",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "Paris is 21 C."
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "input_tokens": 22,
+            "output_tokens": 6
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = SequencedRecordingHTTPTransport(
+            responses: [
+                AIHTTPResponse(
+                    data: firstResponse,
+                    statusCode: 200
+                ),
+                AIHTTPResponse(
+                    data: secondResponse,
+                    statusCode: 200
+                )
+            ]
+        )
+
+        let provider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(
+                model: "fixture-openai",
+                baseURL: URL(
+                    string: "https://openai.example/v1"
+                )!,
+                storeResponses: false
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "openai-token"
+            ),
+            transport: transport
+        )
+
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+        let tool = WeatherFixtureTool()
+        let toolRegistry = AIToolRegistry(
+            tools: [tool]
+        )
+
+        let response = try await orchestrator.respondWithTools(
+            to: AIRequest(
+                messages: [
+                    .user("What is the weather in Paris?")
+                ],
+                tools: [tool.definition]
+            ),
+            toolRegistry: toolRegistry
+        )
+
+        XCTAssertEqual(
+            response.text,
+            "Paris is 21 C."
+        )
+        XCTAssertEqual(
+            response.providerID,
+            .openAI
+        )
+        XCTAssertNil(response.continuation)
+
+        let requests = await transport.capturedRequests()
+        XCTAssertEqual(requests.count, 2)
+
+        let secondBodyData = try XCTUnwrap(
+            requests.last?.httpBody
+        )
+        let secondBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: secondBodyData
+            ) as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            secondBody["store"] as? Bool,
+            false
+        )
+
+        let input = try XCTUnwrap(
+            secondBody["input"] as? [[String: Any]]
+        )
+
+        XCTAssertEqual(input.count, 4)
+        XCTAssertEqual(
+            input[1]["type"] as? String,
+            "reasoning"
+        )
+        XCTAssertEqual(
+            input[2]["type"] as? String,
+            "function_call"
+        )
+        XCTAssertEqual(
+            input[3]["type"] as? String,
+            "function_call_output"
+        )
+        XCTAssertEqual(
+            input[3]["call_id"] as? String,
+            "call_weather"
+        )
+        XCTAssertEqual(
+            input[3]["output"] as? String,
+            #"{"temperature":21,"unit":"C"}"#
+        )
+    }
+}
