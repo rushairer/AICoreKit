@@ -18,17 +18,19 @@ It is designed around capabilities rather than vendors, so product code can use 
 ## Initial modules
 
 - `AICore` — provider contracts, requests, responses, capabilities, availability, errors, credentials, and stream events.
-- `AIHTTP` — injectable HTTP transport for cloud providers.\n- `AIOrchestration` — provider registry, routing, execution preference, and fallback.
+- `AIHTTP` — injectable HTTP transport for cloud providers.
+- `AIOrchestration` — provider registry, routing, execution preference, fallback, and multi-turn tool orchestration.
 - `AITools` — tool definitions, registry, side-effect classification, and execution policy.
 - `AIProviderApple` — Apple Foundation Models provider, gated by runtime availability.
 - `AIProviderCoreAI` — host-safe local Core AI provider and dynamic C ABI bridge.
-- `AIProviderCoreAIWeakLink` — optional weak-link support for apps embedding the iOS/macOS 27 Core AI runtime.\n- `AIProviderOpenAICompatible` — optional OpenAI-compatible chat-completions provider with non-streaming and SSE streaming text generation.
-- `AIProviderAnthropic` — optional Anthropic Messages API provider with text, SSE streaming, and native structured generation.
-- `AIProviderGemini` — optional Gemini provider using Generate Content for text/streaming and Interactions for native structured generation.
-- `AIProviderOpenAI` — optional OpenAI Responses API provider with text, SSE streaming, and native structured generation.
+- `AIProviderCoreAIWeakLink` — optional weak-link support for apps embedding the iOS/macOS 27 Core AI runtime.
+- `AIProviderOpenAICompatible` — optional OpenAI-compatible chat-completions provider with non-streaming and SSE streaming text generation.
+- `AIProviderAnthropic` — optional Anthropic Messages API provider with text, SSE streaming, native structured generation, normalized tool calls, and multi-turn tool continuation.
+- `AIProviderGemini` — optional Gemini provider using Generate Content for text/streaming and Interactions for native structured generation, normalized tool calls, and multi-turn tool continuation.
+- `AIProviderOpenAI` — optional OpenAI Responses API provider with text, SSE streaming, native structured generation, normalized tool calls, and multi-turn tool continuation.
 - `AICoreKit` — convenience umbrella module.
 
-Cloud provider foundations now cover OpenAI-compatible, Anthropic, Gemini, and the OpenAI Responses API; normalized structured output and tool calling remain separate roadmap work.
+Cloud provider foundations now cover OpenAI-compatible, Anthropic, Gemini, and the OpenAI Responses API. OpenAI Responses, Anthropic, and Gemini also share provider-native structured output, normalized tool calls, stateless multi-turn tool continuation, and application-owned confirmation policies.
 
 ## Design principle
 
@@ -45,6 +47,38 @@ let response = try await orchestrator.respond(to: request)
 ```
 
 The runtime decides which registered provider can satisfy the request.
+
+
+
+## Tool calling
+
+Tools are application-owned capabilities. AICoreKit normalizes model tool requests, applies execution policy, executes registered tools, and continues the same provider without exposing vendor-specific conversation history to product code.
+
+The default policy only auto-runs read-only tools:
+
+```swift
+let toolRegistry = AIToolRegistry(
+    tools: [myReadOnlyTool]
+)
+
+let request = AIRequest(
+    messages: [.user("Use the available tools if needed.")],
+    requiredCapabilities: [
+        .textGeneration,
+        .toolCalling
+    ],
+    tools: await toolRegistry.definitions()
+)
+
+let response = try await orchestrator.respondWithTools(
+    to: request,
+    toolRegistry: toolRegistry
+)
+```
+
+For mutating, network, destructive, or explicitly confirmation-required tools, applications can opt into `UserConfirmationAIToolExecutionPolicy` and inject their own `AIToolConfirmationProviding` implementation. AICoreKit never owns or renders confirmation UI.
+
+See [docs/TOOLS.md](docs/TOOLS.md) for the complete tool execution and confirmation model.
 
 ## Provider boundaries
 
