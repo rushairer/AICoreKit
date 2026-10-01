@@ -3049,3 +3049,142 @@ extension AICoreKitTests {
         XCTAssertTrue(requests.isEmpty)
     }
 }
+
+
+private actor RecordingAIHTTPObserver:
+    AIHTTPObserver
+{
+    private var events:
+        [AIHTTPObservationEvent] = []
+
+    func record(
+        _ event: AIHTTPObservationEvent
+    ) async {
+        events.append(event)
+    }
+
+    func capturedEvents()
+        -> [AIHTTPObservationEvent]
+    {
+        events
+    }
+}
+
+extension AICoreKitTests {
+    func testClosureCredentialProviderCanResolveGatewayToken() async throws {
+        let credentials =
+            ClosureAICredentialProvider {
+                request in
+
+                XCTAssertEqual(
+                    request.providerID,
+                    "fixture.gateway"
+                )
+                XCTAssertEqual(
+                    request.kind,
+                    .bearerToken
+                )
+                return "short-lived-token"
+            }
+
+        let value = try await credentials.credential(
+            for: AICredentialRequest(
+                providerID: "fixture.gateway",
+                kind: .bearerToken
+            )
+        )
+
+        XCTAssertEqual(
+            value,
+            "short-lived-token"
+        )
+    }
+
+    func testObservingHTTPTransportEmitsSanitizedMetadata() async throws {
+        let base = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: Data("ok".utf8),
+                statusCode: 200
+            )
+        )
+        let observer =
+            RecordingAIHTTPObserver()
+        let transport = ObservingAIHTTPTransport(
+            base: base,
+            observer: observer
+        )
+
+        var request = URLRequest(
+            url: URL(
+                string:
+                    "https://gateway.example/v1/ai?secret=hidden"
+            )!
+        )
+        request.httpMethod = "POST"
+        request.setValue(
+            "Bearer secret-token",
+            forHTTPHeaderField: "Authorization"
+        )
+        request.httpBody = Data(
+            #"{"private":"payload"}"#.utf8
+        )
+
+        _ = try await transport.data(
+            for: request
+        )
+
+        let events =
+            await observer.capturedEvents()
+        XCTAssertEqual(events.count, 2)
+
+        guard
+            case .started(let started) =
+                events[0]
+        else {
+            XCTFail("Expected start event")
+            return
+        }
+
+        XCTAssertEqual(
+            started.operation,
+            .data
+        )
+        XCTAssertEqual(
+            started.method,
+            "POST"
+        )
+        XCTAssertEqual(
+            started.scheme,
+            "https"
+        )
+        XCTAssertEqual(
+            started.host,
+            "gateway.example"
+        )
+        XCTAssertEqual(
+            started.path,
+            "/v1/ai"
+        )
+
+        guard
+            case .response(let completed) =
+                events[1]
+        else {
+            XCTFail("Expected response event")
+            return
+        }
+
+        XCTAssertEqual(
+            completed.request.requestID,
+            started.requestID
+        )
+        XCTAssertEqual(
+            completed.statusCode,
+            200
+        )
+        XCTAssertGreaterThanOrEqual(
+            completed.durationSeconds,
+            0
+        )
+    }
+}

@@ -15,11 +15,44 @@ The default `URLSessionAIHTTPTransport` is suitable for direct client requests, 
 - application-owned AI gateways;
 - retry and circuit-breaker policy.
 
+### Observability
+
+`ObservingAIHTTPTransport` and `ObservingAIHTTPStreamingTransport` emit request lifecycle events to an injected `AIHTTPObserver`.
+
+Observation metadata is deliberately sanitized by default. It includes only the request ID, operation kind, HTTP method, scheme, host, path, status code, duration, and failure description. It does not expose request headers, response headers, query parameters, request bodies, response bodies, or credentials.
+
+```swift
+let observer = ClosureAIHTTPObserver { event in
+    metrics.record(event)
+}
+
+let transport = ObservingAIHTTPTransport(
+    base: URLSessionAIHTTPTransport(),
+    observer: observer
+)
+```
+
+For streaming requests, the response event records time to the returned HTTP line stream and headers, not time until the entire stream is consumed.
+
 ## Credentials
 
 Cloud providers request credentials through `AICredentialProviding`.
 
 Do not put production service API keys in a public repository or hard-code them in an application binary. Commercial applications should normally exchange an application session for a server-side AI gateway rather than distributing vendor secrets to every client.
+
+`ClosureAICredentialProvider` is a convenience adapter for application-owned credential systems. A product can use it to fetch a short-lived gateway credential at request time without teaching AICoreKit how the product authenticates:
+
+```swift
+let credentials = ClosureAICredentialProvider {
+    request in
+
+    try await appSession.shortLivedAIToken(
+        providerID: request.providerID
+    )
+}
+```
+
+The closure may read Keychain-backed application sessions, refresh an OAuth token, or call a product gateway. AICoreKit does not cache or persist the returned credential.
 
 ## OpenAI-compatible provider
 
