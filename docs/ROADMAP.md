@@ -30,7 +30,7 @@
 - [x] Anthropic provider.
 - [x] Gemini provider.
 - [x] Dedicated OpenAI Responses API provider.
-- [ ] Gateway-oriented credential examples and retry/observability hooks.
+- [x] Gateway-oriented credential examples and retry/observability hooks.
 
 ## 0.4 Structured generation and tools
 

@@ -3188,3 +3188,220 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+private enum RetryFixtureOutcome:
+    Sendable
+{
+    case response(AIHTTPResponse)
+    case failure(AIHTTPTransportError)
+}
+
+private actor SequencedRetryHTTPTransport:
+    AIHTTPTransport
+{
+    private var outcomes:
+        [RetryFixtureOutcome]
+    private var count = 0
+
+    init(
+        outcomes: [RetryFixtureOutcome]
+    ) {
+        self.outcomes = outcomes
+    }
+
+    func data(
+        for request: URLRequest
+    ) async throws -> AIHTTPResponse {
+        count += 1
+
+        guard !outcomes.isEmpty else {
+            throw AIHTTPTransportError
+                .invalidResponse
+        }
+
+        switch outcomes.removeFirst() {
+        case .response(let response):
+            return response
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func requestCount() -> Int {
+        count
+    }
+}
+
+private actor RecordingAIHTTPSleeper:
+    AIHTTPSleeping
+{
+    private var delays:
+        [TimeInterval] = []
+
+    func sleep(
+        for seconds: TimeInterval
+    ) async throws {
+        delays.append(seconds)
+    }
+
+    func capturedDelays()
+        -> [TimeInterval]
+    {
+        delays
+    }
+}
+
+extension AICoreKitTests {
+    func testRetryingHTTPTransportRetriesTransientStatusAndHonorsRetryAfter() async throws {
+        let base = SequencedRetryHTTPTransport(
+            outcomes: [
+                .response(
+                    AIHTTPResponse(
+                        data: Data(),
+                        statusCode: 503,
+                        headers: [
+                            "Retry-After": "2"
+                        ]
+                    )
+                ),
+                .response(
+                    AIHTTPResponse(
+                        data: Data("ok".utf8),
+                        statusCode: 200
+                    )
+                )
+            ]
+        )
+        let sleeper =
+            RecordingAIHTTPSleeper()
+        let transport =
+            RetryingAIHTTPTransport(
+                base: base,
+                policy: AIHTTPRetryPolicy(
+                    maximumAttempts: 3,
+                    baseDelaySeconds: 0.1,
+                    maximumDelaySeconds: 5
+                ),
+                sleeper: sleeper
+            )
+
+        let response = try await transport.data(
+            for: URLRequest(
+                url: URL(
+                    string:
+                        "https://gateway.example/v1/ai"
+                )!
+            )
+        )
+
+        XCTAssertEqual(
+            response.statusCode,
+            200
+        )
+        XCTAssertEqual(
+            await base.requestCount(),
+            2
+        )
+        XCTAssertEqual(
+            await sleeper.capturedDelays(),
+            [2]
+        )
+    }
+
+    func testRetryingHTTPTransportDoesNotRetryAmbiguousTransportErrorsByDefault() async throws {
+        let base = SequencedRetryHTTPTransport(
+            outcomes: [
+                .failure(.invalidResponse),
+                .response(
+                    AIHTTPResponse(
+                        data: Data(),
+                        statusCode: 200
+                    )
+                )
+            ]
+        )
+        let transport =
+            RetryingAIHTTPTransport(
+                base: base,
+                policy: AIHTTPRetryPolicy(
+                    maximumAttempts: 3,
+                    baseDelaySeconds: 0
+                ),
+                sleeper:
+                    RecordingAIHTTPSleeper()
+            )
+
+        do {
+            _ = try await transport.data(
+                for: URLRequest(
+                    url: URL(
+                        string:
+                            "https://gateway.example/v1/ai"
+                    )!
+                )
+            )
+            XCTFail(
+                "Expected transport error"
+            )
+        } catch let error as AIHTTPTransportError {
+            XCTAssertEqual(
+                error,
+                .invalidResponse
+            )
+        }
+
+        XCTAssertEqual(
+            await base.requestCount(),
+            1
+        )
+    }
+
+    func testRetryingHTTPTransportCanExplicitlyRetryTransportErrors() async throws {
+        let base = SequencedRetryHTTPTransport(
+            outcomes: [
+                .failure(.invalidResponse),
+                .response(
+                    AIHTTPResponse(
+                        data: Data("ok".utf8),
+                        statusCode: 200
+                    )
+                )
+            ]
+        )
+        let sleeper =
+            RecordingAIHTTPSleeper()
+        let transport =
+            RetryingAIHTTPTransport(
+                base: base,
+                policy: AIHTTPRetryPolicy(
+                    maximumAttempts: 2,
+                    retryTransportErrors: true,
+                    baseDelaySeconds: 0
+                ),
+                sleeper: sleeper
+            )
+
+        let response = try await transport.data(
+            for: URLRequest(
+                url: URL(
+                    string:
+                        "https://gateway.example/v1/ai"
+                )!
+            )
+        )
+
+        XCTAssertEqual(
+            response.statusCode,
+            200
+        )
+        XCTAssertEqual(
+            await base.requestCount(),
+            2
+        )
+        XCTAssertEqual(
+            await sleeper.capturedDelays(),
+            [0]
+        )
+    }
+}

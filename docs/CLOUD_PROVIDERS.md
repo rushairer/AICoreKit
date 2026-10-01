@@ -161,3 +161,52 @@ The provider:
 - supports native JSON-schema structured outputs;
 - maps Responses API `function_call` output items into normalized `AIToolCall` values;
 - supports stateless multi-turn tool continuation with `store=false` by preserving provider-native output items inside opaque continuation state and appending `function_call_output` items on the next turn.
+
+
+## Retry
+
+Retry is an explicit transport decorator rather than implicit provider behavior.
+
+`RetryingAIHTTPTransport` retries non-streaming requests according to `AIHTTPRetryPolicy`. The default policy retries only HTTP 429, 502, 503, and 504 responses, with exponential backoff and numeric `Retry-After` support.
+
+```swift
+let transport = RetryingAIHTTPTransport(
+    base: URLSessionAIHTTPTransport(),
+    policy: AIHTTPRetryPolicy(
+        maximumAttempts: 3
+    )
+)
+```
+
+Transport-level failures are **not** retried by default. For a POST request, a dropped connection can be ambiguous: the remote service may already have processed and billed the request even though the client did not receive the response. Applications or gateways that provide idempotency guarantees can opt in explicitly:
+
+```swift
+let policy = AIHTTPRetryPolicy(
+    maximumAttempts: 3,
+    retryTransportErrors: true
+)
+```
+
+`RetryingAIHTTPStreamingTransport` preserves streaming capability. Its `data(for:)` path uses the same status-code retry policy. Its `lines(for:)` path only retries transport failures that occur before a line stream is established and only when `retryTransportErrors` is enabled. It never retries after a stream has begun because partial model output cannot be replayed or merged safely in a vendor-neutral way.
+
+### Composing retry and observability
+
+Transport decorators can be ordered according to the desired metric boundary.
+
+To observe every retry attempt:
+
+```swift
+let observedBase = ObservingAIHTTPTransport(
+    base: URLSessionAIHTTPTransport(),
+    observer: observer
+)
+
+let transport = RetryingAIHTTPTransport(
+    base: observedBase,
+    policy: policy
+)
+```
+
+To observe one logical request including all retry time, put `ObservingAIHTTPTransport` outside the retry wrapper instead.
+
+A production gateway should additionally use its own request ID or vendor-supported idempotency mechanism when duplicate remote work would be unacceptable.
