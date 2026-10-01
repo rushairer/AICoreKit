@@ -2110,3 +2110,198 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+private struct ToolLoopStubProvider:
+    AIToolContinuingProvider
+{
+    let id: AIProviderID = "fixture.tool-loop"
+    let displayName = "Tool Loop Fixture"
+    let capabilities: AICapabilities = [
+        .textGeneration,
+        .toolCalling,
+        .localExecution
+    ]
+
+    func availability() async -> AIAvailability {
+        .available
+    }
+
+    func generate(
+        _ request: AIRequest
+    ) async throws -> AIResponse {
+        AIResponse(
+            text: "",
+            toolCalls: [
+                AIToolCall(
+                    id: "call-1",
+                    name: "echo",
+                    argumentsJSON: #"{"value":"hello"}"#
+                )
+            ],
+            providerID: id,
+            finishReason: .toolCallRequested,
+            continuation: AIToolContinuation(
+                providerID: id,
+                opaqueState: "round-1"
+            )
+        )
+    }
+
+    func continueToolCalls(
+        _ continuation: AIToolContinuation,
+        outputs: [AIToolOutput]
+    ) async throws -> AIResponse {
+        guard
+            continuation.providerID == id,
+            continuation.opaqueState == "round-1",
+            let output = outputs.first
+        else {
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "Invalid fixture continuation"
+            )
+        }
+
+        return AIResponse(
+            text: output.content,
+            providerID: id
+        )
+    }
+}
+
+private struct MutatingFixtureTool: AITool {
+    let definition = AIToolDefinition(
+        name: "mutate",
+        description: "Mutating fixture",
+        inputSchemaJSON: #"{"type":"object"}"#,
+        sideEffectLevel: .localMutation
+    )
+
+    func execute(
+        argumentsJSON: String
+    ) async throws -> AIToolResult {
+        AIToolResult(
+            toolName: definition.name,
+            content: "mutated"
+        )
+    }
+}
+
+private struct MutatingToolLoopStubProvider:
+    AIToolContinuingProvider
+{
+    let id: AIProviderID = "fixture.mutating-loop"
+    let displayName = "Mutating Tool Loop Fixture"
+    let capabilities: AICapabilities = [
+        .textGeneration,
+        .toolCalling,
+        .localExecution
+    ]
+
+    func availability() async -> AIAvailability {
+        .available
+    }
+
+    func generate(
+        _ request: AIRequest
+    ) async throws -> AIResponse {
+        AIResponse(
+            text: "",
+            toolCalls: [
+                AIToolCall(
+                    id: "call-mutate",
+                    name: "mutate",
+                    argumentsJSON: "{}"
+                )
+            ],
+            providerID: id,
+            finishReason: .toolCallRequested,
+            continuation: AIToolContinuation(
+                providerID: id,
+                opaqueState: "round-1"
+            )
+        )
+    }
+
+    func continueToolCalls(
+        _ continuation: AIToolContinuation,
+        outputs: [AIToolOutput]
+    ) async throws -> AIResponse {
+        AIResponse(
+            text: "unexpected",
+            providerID: id
+        )
+    }
+}
+
+extension AICoreKitTests {
+    func testOrchestratorRunsReadOnlyToolLoop() async throws {
+        let provider = ToolLoopStubProvider()
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+
+        let toolRegistry = AIToolRegistry(
+            tools: [EchoTool()]
+        )
+
+        let response = try await orchestrator.respondWithTools(
+            to: AIRequest(
+                messages: [.user("echo hello")],
+                tools: [EchoTool().definition]
+            ),
+            toolRegistry: toolRegistry
+        )
+
+        XCTAssertEqual(
+            response.text,
+            #"{"value":"hello"}"#
+        )
+        XCTAssertEqual(
+            response.providerID,
+            provider.id
+        )
+    }
+
+    func testOrchestratorBlocksMutatingToolByDefault() async throws {
+        let provider = MutatingToolLoopStubProvider()
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+        let toolRegistry = AIToolRegistry(
+            tools: [MutatingFixtureTool()]
+        )
+
+        do {
+            _ = try await orchestrator.respondWithTools(
+                to: AIRequest(
+                    messages: [.user("mutate")],
+                    tools: [
+                        MutatingFixtureTool().definition
+                    ]
+                ),
+                toolRegistry: toolRegistry
+            )
+            XCTFail("Expected execution policy rejection")
+        } catch let error as AIError {
+            guard
+                case .toolExecutionFailed(let message) =
+                    error
+            else {
+                XCTFail("Unexpected AIError: \(error)")
+                return
+            }
+
+            XCTAssertTrue(
+                message.contains("blocked")
+            )
+        }
+    }
+}

@@ -24,7 +24,13 @@ let package = Package(
     targets: [
         .target(name: "AICore"),
         .target(name: "AIHTTP"),
-        .target(name: "AIOrchestration", dependencies: ["AICore"]),
+        .target(
+            name: "AIOrchestration",
+            dependencies: [
+                "AICore",
+                "AITools"
+            ]
+        ),
         .target(name: "AITools", dependencies: ["AICore"]),
         .target(name: "AIProviderApple", dependencies: ["AICore"]),
         .target(

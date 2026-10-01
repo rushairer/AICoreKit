@@ -23,18 +23,21 @@ public struct AIResponse: Sendable {
     public let providerID: AIProviderID
     public let finishReason: AIFinishReason
     public let usage: AIUsage?
+    public let continuation: AIToolContinuation?
 
     public init(
         text: String,
         toolCalls: [AIToolCall] = [],
         providerID: AIProviderID,
         finishReason: AIFinishReason = .completed,
-        usage: AIUsage? = nil
+        usage: AIUsage? = nil,
+        continuation: AIToolContinuation? = nil
     ) {
         self.text = text
         self.toolCalls = toolCalls
         self.providerID = providerID
         self.finishReason = finishReason
         self.usage = usage
+        self.continuation = continuation
     }
 }

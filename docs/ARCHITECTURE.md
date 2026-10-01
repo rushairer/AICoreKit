@@ -42,3 +42,14 @@ Streaming is represented as AsyncThrowingStream<AIStreamEvent, Error>. Providers
 ## Security
 
 Credentials are injected through AICredentialProviding. The package does not persist application secrets. Commercial applications should generally route vendor credentials through a server-side gateway rather than embedding vendor API keys in an app binary.
+
+
+## Tool-call continuation
+
+Tool-call normalization and execution are intentionally separated.
+
+Providers return normalized `AIToolCall` values. If a response requires another model turn, the provider may also attach an opaque `AIToolContinuation`. The continuation belongs to that provider and preserves provider-native state without leaking OpenAI response items, Anthropic content blocks, Gemini interaction steps, or other vendor history formats into `AIMessage`.
+
+`DefaultAIOrchestrator.respondWithTools` keeps provider affinity after the first successful model response, executes registered tools sequentially through `AIToolRegistry`, and asks the same `AIToolContinuingProvider` to continue. Provider fallback is allowed only before a provider has successfully produced the first response; this avoids replaying tool side effects against a different model after execution begins.
+
+The default execution policy permits only read-only tools that do not require user confirmation. Mutating, network, destructive, or confirmation-required tools remain blocked unless the application injects a more permissive policy.

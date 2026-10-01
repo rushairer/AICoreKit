@@ -1,4 +1,5 @@
 public import AICore
+public import AITools
 
 public actor DefaultAIOrchestrator {
     private let registry: AIProviderRegistry
@@ -45,6 +46,130 @@ public actor DefaultAIOrchestrator {
             throw error
         }
         throw AIError.exhaustedProviders
+    }
+
+    public func respondWithTools(
+        to request: AIRequest,
+        toolRegistry: AIToolRegistry,
+        executionPolicy: any AIToolExecutionPolicy =
+            ReadOnlyAIToolExecutionPolicy(),
+        configuration: AIToolLoopConfiguration =
+            AIToolLoopConfiguration(),
+        fallbackPolicy: AIFallbackPolicy = .enabled
+    ) async throws -> AIResponse {
+        let providers = await registry.allProviders()
+
+        var requiredCapabilities =
+            request.requiredCapabilities
+        if !request.tools.isEmpty {
+            requiredCapabilities.insert(.toolCalling)
+        }
+
+        var candidates = await router.candidates(
+            from: providers,
+            requiredCapabilities: requiredCapabilities,
+            preference: request.executionPreference
+        )
+
+        if !fallbackPolicy.allowsFallback {
+            candidates = Array(candidates.prefix(1))
+        } else if let limit =
+            fallbackPolicy.maximumProviderAttempts
+        {
+            candidates = Array(
+                candidates.prefix(max(0, limit))
+            )
+        }
+
+        guard !candidates.isEmpty else {
+            throw AIError.exhaustedProviders
+        }
+
+        var selectedProvider: (any AIProvider)?
+        var response: AIResponse?
+        var lastError: Error?
+
+        for provider in candidates {
+            do {
+                response = try await provider.generate(
+                    request
+                )
+                selectedProvider = provider
+                break
+            } catch is CancellationError {
+                throw AIError.cancelled
+            } catch {
+                lastError = error
+            }
+        }
+
+        guard
+            let provider = selectedProvider,
+            var currentResponse = response
+        else {
+            if let lastError {
+                throw lastError
+            }
+            throw AIError.exhaustedProviders
+        }
+
+        var round = 0
+
+        while !currentResponse.toolCalls.isEmpty {
+            guard round < configuration.maximumRounds else {
+                throw AIError.toolExecutionFailed(
+                    "Tool loop exceeded the maximum of "
+                    + String(configuration.maximumRounds)
+                    + " rounds"
+                )
+            }
+
+            guard
+                let continuingProvider =
+                    provider as? any AIToolContinuingProvider
+            else {
+                throw AIError.providerFailure(
+                    providerID: provider.id,
+                    message:
+                        "Provider returned tool calls but does not support continuation"
+                )
+            }
+
+            guard
+                let continuation =
+                    currentResponse.continuation
+            else {
+                throw AIError.providerFailure(
+                    providerID: provider.id,
+                    message:
+                        "Provider returned tool calls without continuation state"
+                )
+            }
+
+            guard continuation.providerID == provider.id else {
+                throw AIError.providerFailure(
+                    providerID: provider.id,
+                    message:
+                        "Tool continuation belongs to a different provider"
+                )
+            }
+
+            let outputs = try await toolRegistry.execute(
+                currentResponse.toolCalls,
+                policy: executionPolicy
+            )
+
+            currentResponse =
+                try await continuingProvider
+                    .continueToolCalls(
+                        continuation,
+                        outputs: outputs
+                    )
+
+            round += 1
+        }
+
+        return currentResponse
     }
 
     public func stream(
