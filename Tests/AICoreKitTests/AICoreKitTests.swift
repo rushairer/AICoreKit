@@ -3299,12 +3299,17 @@ extension AICoreKitTests {
             response.statusCode,
             200
         )
+        let requestCount =
+            await base.requestCount()
+        let delays =
+            await sleeper.capturedDelays()
+
         XCTAssertEqual(
-            await base.requestCount(),
+            requestCount,
             2
         )
         XCTAssertEqual(
-            await sleeper.capturedDelays(),
+            delays,
             [2]
         )
     }
@@ -3351,8 +3356,11 @@ extension AICoreKitTests {
             )
         }
 
+        let requestCount =
+            await base.requestCount()
+
         XCTAssertEqual(
-            await base.requestCount(),
+            requestCount,
             1
         )
     }
@@ -3395,12 +3403,17 @@ extension AICoreKitTests {
             response.statusCode,
             200
         )
+        let requestCount =
+            await base.requestCount()
+        let delays =
+            await sleeper.capturedDelays()
+
         XCTAssertEqual(
-            await base.requestCount(),
+            requestCount,
             2
         )
         XCTAssertEqual(
-            await sleeper.capturedDelays(),
+            delays,
             [0]
         )
     }
