@@ -113,6 +113,10 @@ AICoreKit is not tagged for production use yet. During early development, depend
 swift test
 ```
 
+## Compatibility
+
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for platform minimums, provider capability support, and the conformance contract.
+
 ## Roadmap
 
 See [docs/ROADMAP.md](docs/ROADMAP.md).
