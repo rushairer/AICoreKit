@@ -30,6 +30,7 @@ public struct GeminiProvider: AIProvider {
         var capabilities: AICapabilities = [
             .textGeneration,
             .structuredGeneration,
+            .toolCalling,
             .remoteExecution,
             .requiresNetwork
         ]
@@ -66,6 +67,12 @@ public struct GeminiProvider: AIProvider {
 
     public func generate(_ request: AIRequest) async throws -> AIResponse {
         try validate(request)
+
+        if !request.tools.isEmpty {
+            return try await generateToolInteraction(
+                request
+            )
+        }
 
         let urlRequest = try await makeURLRequest(
             for: request,
@@ -138,6 +145,10 @@ public struct GeminiProvider: AIProvider {
     }
 
     public func stream(_ request: AIRequest) -> AIResponseStream {
+        if !request.tools.isEmpty {
+            return fallbackStream(request)
+        }
+
         guard
             let streamingTransport =
                 transport as? any AIHTTPStreamingTransport
@@ -335,6 +346,7 @@ public struct GeminiProvider: AIProvider {
                 GeminiInteractionRequest.ResponseFormat(
                     schema: schema
                 ),
+            tools: nil,
             store: configuration.storeInteractions,
             generationConfig:
                 generationConfig.isEmpty
@@ -466,6 +478,216 @@ public struct GeminiProvider: AIProvider {
         }
     }
 
+    private func generateToolInteraction(
+        _ request: AIRequest
+    ) async throws -> AIResponse {
+        guard let url = interactionsURL else {
+            throw AIError.invalidRequest(
+                "Invalid Gemini Interactions endpoint URL"
+            )
+        }
+
+        let credential = try await requiredCredential()
+        let system = request.messages
+            .filter { $0.role == .system }
+            .map(\.content)
+            .joined(separator: "\n\n")
+
+        var promptParts: [String] = []
+        for message in request.messages {
+            switch message.role {
+            case .system:
+                continue
+            case .user:
+                promptParts.append(
+                    "User: \(message.content)"
+                )
+            case .assistant:
+                promptParts.append(
+                    "Assistant: \(message.content)"
+                )
+            case .tool:
+                throw AIError.unsupportedCapability
+            }
+        }
+
+        let input = promptParts.joined(
+            separator: "\n\n"
+        )
+        guard !input.isEmpty else {
+            throw AIError.invalidRequest(
+                "Gemini tool interaction requires non-empty input"
+            )
+        }
+
+        let generationConfig =
+            GeminiInteractionRequest.GenerationConfiguration(
+                maxOutputTokens:
+                    request.maxOutputTokens
+                    ?? configuration.defaultMaxOutputTokens,
+                temperature:
+                    request.temperature
+                    ?? configuration.defaultTemperature
+            )
+
+        let body = GeminiInteractionRequest(
+            model: normalizedModel,
+            input: input,
+            systemInstruction:
+                system.isEmpty
+                ? nil
+                : system,
+            responseFormat: nil,
+            tools: try request.tools.map {
+                try GeminiInteractionRequest.Tool($0)
+            },
+            store: configuration.storeInteractions,
+            generationConfig:
+                generationConfig.isEmpty
+                ? nil
+                : generationConfig
+        )
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = configuration.timeout
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        urlRequest.setValue(
+            credential,
+            forHTTPHeaderField:
+                configuration.apiKeyHeaderName
+        )
+
+        do {
+            urlRequest.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            throw AIError.invalidRequest(
+                "Failed to encode Gemini tool interaction"
+            )
+        }
+
+        let response: AIHTTPResponse
+        do {
+            response = try await transport.data(
+                for: urlRequest
+            )
+        } catch is CancellationError {
+            throw AIError.cancelled
+        } catch {
+            throw AIError.transportFailure(
+                error.localizedDescription
+            )
+        }
+
+        try validateHTTPStatus(
+            response.statusCode,
+            data: response.data
+        )
+
+        let interaction: GeminiInteractionResponse
+        do {
+            interaction = try JSONDecoder().decode(
+                GeminiInteractionResponse.self,
+                from: response.data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+
+        switch interaction.status {
+        case "completed", "requires_action":
+            break
+        case "cancelled":
+            throw AIError.cancelled
+        case "incomplete":
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "Gemini tool interaction was incomplete"
+            )
+        case "failed":
+            throw AIError.providerFailure(
+                providerID: id,
+                message: "Gemini tool interaction failed"
+            )
+        default:
+            throw AIError.providerFailure(
+                providerID: id,
+                message:
+                    "Unexpected Gemini interaction status: "
+                    + interaction.status
+            )
+        }
+
+        var text = ""
+        var toolCalls: [AIToolCall] = []
+
+        for step in interaction.steps ?? [] {
+            switch step.type {
+            case "model_output":
+                for content in step.content ?? [] {
+                    if
+                        content.type == "text",
+                        let value = content.text
+                    {
+                        text += value
+                    }
+                }
+
+            case "function_call":
+                guard
+                    let callID = step.id,
+                    let name = step.name,
+                    let arguments = step.arguments
+                else {
+                    throw AIError.decodingFailure(
+                        "Gemini function_call step omitted id, name, or arguments"
+                    )
+                }
+
+                toolCalls.append(
+                    AIToolCall(
+                        id: callID,
+                        name: name,
+                        argumentsJSON:
+                            try arguments.jsonString()
+                    )
+                )
+
+            default:
+                break
+            }
+        }
+
+        guard !text.isEmpty || !toolCalls.isEmpty else {
+            throw AIError.decodingFailure(
+                "Gemini interaction did not contain text or tool calls"
+            )
+        }
+
+        let usage = interaction.usage.map {
+            AIUsage(
+                inputTokens: $0.totalInputTokens,
+                outputTokens: $0.totalOutputTokens
+            )
+        }
+
+        return AIResponse(
+            text: text,
+            toolCalls: toolCalls,
+            providerID: id,
+            finishReason:
+                toolCalls.isEmpty
+                ? .completed
+                : .toolCallRequested,
+            usage: usage
+        )
+    }
+
     private var credentialRequest: AICredentialRequest {
         AICredentialRequest(
             providerID: id,
@@ -555,10 +777,6 @@ public struct GeminiProvider: AIProvider {
         guard capabilities.satisfies(
             request.requiredCapabilities
         ) else {
-            throw AIError.unsupportedCapability
-        }
-
-        guard request.tools.isEmpty else {
             throw AIError.unsupportedCapability
         }
 
@@ -811,6 +1029,10 @@ public struct GeminiProvider: AIProvider {
                         continuation.yield(
                             .textDelta(response.text)
                         )
+                    }
+
+                    for toolCall in response.toolCalls {
+                        continuation.yield(.toolCall(toolCall))
                     }
 
                     if let usage = response.usage {

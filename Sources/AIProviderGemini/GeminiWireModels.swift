@@ -89,7 +89,8 @@ struct GeminiInteractionRequest: Encodable, Sendable {
     let model: String
     let input: String
     let systemInstruction: String?
-    let responseFormat: ResponseFormat
+    let responseFormat: ResponseFormat?
+    let tools: [Tool]?
     let store: Bool
     let generationConfig: GenerationConfiguration?
 
@@ -98,8 +99,23 @@ struct GeminiInteractionRequest: Encodable, Sendable {
         case input
         case systemInstruction = "system_instruction"
         case responseFormat = "response_format"
+        case tools
         case store
         case generationConfig = "generation_config"
+    }
+
+    struct Tool: Encodable, Sendable {
+        let type: String
+        let name: String
+        let description: String
+        let parameters: AIJSONValue
+
+        init(_ definition: AIToolDefinition) throws {
+            type = "function"
+            name = definition.name
+            description = definition.description
+            parameters = try definition.parsedInputSchema()
+        }
     }
 
     struct ResponseFormat: Encodable, Sendable {
@@ -143,6 +159,9 @@ struct GeminiInteractionResponse: Decodable, Sendable {
     struct Step: Decodable, Sendable {
         let type: String
         let content: [Content]?
+        let id: String?
+        let name: String?
+        let arguments: AIJSONValue?
     }
 
     struct Content: Decodable, Sendable {

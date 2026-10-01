@@ -25,6 +25,20 @@ public struct AIToolDefinition: Hashable, Sendable, Codable {
         self.sideEffectLevel = sideEffectLevel
         self.requiresUserConfirmation = requiresUserConfirmation
     }
+
+    public func parsedInputSchema() throws -> AIJSONValue {
+        let schema = try AIJSONValue(
+            jsonString: inputSchemaJSON
+        )
+
+        guard case .object = schema else {
+            throw AIError.invalidRequest(
+                "Tool input schema must be a JSON object"
+            )
+        }
+
+        return schema
+    }
 }
 
 public struct AIToolCall: Hashable, Sendable, Codable {

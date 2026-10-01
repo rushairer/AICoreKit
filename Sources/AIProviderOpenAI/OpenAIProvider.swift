@@ -30,6 +30,7 @@ public struct OpenAIProvider: AIProvider {
         var capabilities: AICapabilities = [
             .textGeneration,
             .structuredGeneration,
+            .toolCalling,
             .remoteExecution,
             .requiresNetwork
         ]
@@ -205,6 +206,12 @@ public struct OpenAIProvider: AIProvider {
                                 fallbackRefusal: accumulatedRefusal
                             )
 
+                            for toolCall in normalized.toolCalls {
+                                continuation.yield(
+                                    .toolCall(toolCall)
+                                )
+                            }
+
                             if let usage = normalized.usage {
                                 continuation.yield(.usage(usage))
                             }
@@ -310,10 +317,6 @@ public struct OpenAIProvider: AIProvider {
         guard capabilities.satisfies(
             request.requiredCapabilities
         ) else {
-            throw AIError.unsupportedCapability
-        }
-
-        guard request.tools.isEmpty else {
             throw AIError.unsupportedCapability
         }
 
@@ -465,7 +468,13 @@ public struct OpenAIProvider: AIProvider {
                 OpenAIResponsesRequest.TextConfiguration(
                     schema: $0
                 )
-            }
+            },
+            tools:
+                request.tools.isEmpty
+                ? nil
+                : try request.tools.map {
+                    try OpenAIResponsesRequest.Tool($0)
+                }
         )
 
         var urlRequest = URLRequest(url: endpointURL)
@@ -585,21 +594,43 @@ public struct OpenAIProvider: AIProvider {
     ) throws -> AIResponse {
         var text = ""
         var refusal = ""
+        var toolCalls: [AIToolCall] = []
 
         for item in response.output ?? [] {
-            guard item.type == "message" else {
-                continue
-            }
-
-            for content in item.content ?? [] {
-                switch content.type {
-                case "output_text":
-                    text += content.text ?? ""
-                case "refusal":
-                    refusal += content.refusal ?? ""
-                default:
-                    break
+            switch item.type {
+            case "message":
+                for content in item.content ?? [] {
+                    switch content.type {
+                    case "output_text":
+                        text += content.text ?? ""
+                    case "refusal":
+                        refusal += content.refusal ?? ""
+                    default:
+                        break
+                    }
                 }
+
+            case "function_call":
+                guard
+                    let callID = item.callID ?? item.id,
+                    let name = item.name,
+                    let arguments = item.arguments
+                else {
+                    throw AIError.decodingFailure(
+                        "OpenAI function call omitted id, name, or arguments"
+                    )
+                }
+
+                toolCalls.append(
+                    AIToolCall(
+                        id: callID,
+                        name: name,
+                        argumentsJSON: arguments
+                    )
+                )
+
+            default:
+                break
             }
         }
 
@@ -622,10 +653,11 @@ public struct OpenAIProvider: AIProvider {
         }
 
         if text.isEmpty,
+           toolCalls.isEmpty,
            response.status == "completed"
         {
             throw AIError.decodingFailure(
-                "OpenAI response did not contain output text"
+                "OpenAI response did not contain output text or tool calls"
             )
         }
 
@@ -640,8 +672,12 @@ public struct OpenAIProvider: AIProvider {
 
         return AIResponse(
             text: text,
+            toolCalls: toolCalls,
             providerID: id,
-            finishReason: finish,
+            finishReason:
+                toolCalls.isEmpty
+                ? finish
+                : .toolCallRequested,
             usage: usage(from: response.usage)
         )
     }
@@ -705,6 +741,10 @@ public struct OpenAIProvider: AIProvider {
                         continuation.yield(
                             .textDelta(response.text)
                         )
+                    }
+
+                    for toolCall in response.toolCalls {
+                        continuation.yield(.toolCall(toolCall))
                     }
 
                     if let usage = response.usage {

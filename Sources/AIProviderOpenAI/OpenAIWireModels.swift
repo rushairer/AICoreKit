@@ -8,6 +8,7 @@ struct OpenAIResponsesRequest: Encodable, Sendable {
     let stream: Bool
     let store: Bool
     let text: TextConfiguration?
+    let tools: [Tool]?
 
     enum CodingKeys: String, CodingKey {
         case model
@@ -17,6 +18,7 @@ struct OpenAIResponsesRequest: Encodable, Sendable {
         case stream
         case store
         case text
+        case tools
     }
 
     struct InputMessage: Encodable, Sendable {
@@ -36,6 +38,20 @@ struct OpenAIResponsesRequest: Encodable, Sendable {
             }
 
             content = message.content
+        }
+    }
+
+    struct Tool: Encodable, Sendable {
+        let type: String
+        let name: String
+        let description: String
+        let parameters: AIJSONValue
+
+        init(_ definition: AIToolDefinition) throws {
+            type = "function"
+            name = definition.name
+            description = definition.description
+            parameters = try definition.parsedInputSchema()
         }
     }
 
@@ -83,6 +99,20 @@ struct OpenAIResponseObject: Decodable, Sendable {
         let type: String
         let role: String?
         let content: [OutputContent]?
+        let id: String?
+        let callID: String?
+        let name: String?
+        let arguments: String?
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case role
+            case content
+            case id
+            case callID = "call_id"
+            case name
+            case arguments
+        }
     }
 
     struct OutputContent: Decodable, Sendable {

@@ -62,7 +62,7 @@ public enum AIJSONValue: Hashable, Sendable, Codable {
     public init(jsonString: String) throws {
         guard let data = jsonString.data(using: .utf8) else {
             throw AIError.invalidRequest(
-                "JSON schema must be valid UTF-8"
+                "JSON value must be valid UTF-8"
             )
         }
 
@@ -73,9 +73,40 @@ public enum AIJSONValue: Hashable, Sendable, Codable {
             )
         } catch {
             throw AIError.invalidRequest(
-                "Invalid JSON schema: \(error.localizedDescription)"
+                "Invalid JSON value: \(error.localizedDescription)"
             )
         }
+    }
+
+    public func jsonString(
+        sortedKeys: Bool = true
+    ) throws -> String {
+        let encoder = JSONEncoder()
+        if sortedKeys {
+            encoder.outputFormatting = [.sortedKeys]
+        }
+
+        let data: Data
+        do {
+            data = try encoder.encode(self)
+        } catch {
+            throw AIError.decodingFailure(
+                "Failed to encode JSON value: \(error.localizedDescription)"
+            )
+        }
+
+        guard
+            let string = String(
+                data: data,
+                encoding: .utf8
+            )
+        else {
+            throw AIError.decodingFailure(
+                "Encoded JSON value was not UTF-8"
+            )
+        }
+
+        return string
     }
 }
 

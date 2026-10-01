@@ -30,6 +30,7 @@ public struct AnthropicProvider: AIProvider {
         var capabilities: AICapabilities = [
             .textGeneration,
             .structuredGeneration,
+            .toolCalling,
             .remoteExecution,
             .requiresNetwork
         ]
@@ -106,23 +107,50 @@ public struct AnthropicProvider: AIProvider {
             .compactMap(\.text)
             .joined()
 
-        guard !text.isEmpty else {
+        var toolCalls: [AIToolCall] = []
+        for block in decoded.content where block.type == "tool_use" {
+            guard
+                let callID = block.id,
+                let name = block.name,
+                let input = block.input
+            else {
+                throw AIError.decodingFailure(
+                    "Anthropic tool_use block omitted id, name, or input"
+                )
+            }
+
+            toolCalls.append(
+                AIToolCall(
+                    id: callID,
+                    name: name,
+                    argumentsJSON: try input.jsonString()
+                )
+            )
+        }
+
+        guard !text.isEmpty || !toolCalls.isEmpty else {
             throw AIError.decodingFailure(
-                "Anthropic response did not contain text content"
+                "Anthropic response did not contain text or tool calls"
             )
         }
 
         return AIResponse(
             text: text,
+            toolCalls: toolCalls,
             providerID: id,
-            finishReason: finishReason(
-                from: decoded.stopReason
-            ),
+            finishReason:
+                toolCalls.isEmpty
+                ? finishReason(from: decoded.stopReason)
+                : .toolCallRequested,
             usage: usage(from: decoded.usage)
         )
     }
 
     public func stream(_ request: AIRequest) -> AIResponseStream {
+        if !request.tools.isEmpty {
+            return fallbackStream(request)
+        }
+
         guard
             let streamingTransport =
                 transport as? any AIHTTPStreamingTransport
@@ -366,9 +394,6 @@ public struct AnthropicProvider: AIProvider {
             throw AIError.unsupportedCapability
         }
 
-        guard request.tools.isEmpty else {
-            throw AIError.unsupportedCapability
-        }
     }
 
     public func generateStructured<Output: Decodable & Sendable>(
@@ -515,7 +540,13 @@ public struct AnthropicProvider: AIProvider {
                 AnthropicMessageRequest.OutputConfiguration(
                     schema: $0
                 )
-            }
+            },
+            tools:
+                request.tools.isEmpty
+                ? nil
+                : try request.tools.map {
+                    try AnthropicMessageRequest.Tool($0)
+                }
         )
 
         var urlRequest = URLRequest(url: endpointURL)
@@ -710,6 +741,10 @@ public struct AnthropicProvider: AIProvider {
                         continuation.yield(
                             .textDelta(response.text)
                         )
+                    }
+
+                    for toolCall in response.toolCalls {
+                        continuation.yield(.toolCall(toolCall))
                     }
 
                     if let usage = response.usage {

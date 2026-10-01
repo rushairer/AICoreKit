@@ -8,6 +8,7 @@ struct AnthropicMessageRequest: Encodable, Sendable {
     let temperature: Double?
     let stream: Bool
     let outputConfig: OutputConfiguration?
+    let tools: [Tool]?
 
     enum CodingKeys: String, CodingKey {
         case model
@@ -17,6 +18,25 @@ struct AnthropicMessageRequest: Encodable, Sendable {
         case temperature
         case stream
         case outputConfig = "output_config"
+        case tools
+    }
+
+    struct Tool: Encodable, Sendable {
+        let name: String
+        let description: String
+        let inputSchema: AIJSONValue
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case description
+            case inputSchema = "input_schema"
+        }
+
+        init(_ definition: AIToolDefinition) throws {
+            name = definition.name
+            description = definition.description
+            inputSchema = try definition.parsedInputSchema()
+        }
     }
 
     struct OutputConfiguration: Encodable, Sendable {
@@ -67,6 +87,9 @@ struct AnthropicMessageResponse: Decodable, Sendable {
     struct ContentBlock: Decodable, Sendable {
         let type: String
         let text: String?
+        let id: String?
+        let name: String?
+        let input: AIJSONValue?
     }
 }
 

@@ -1793,3 +1793,320 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    private var weatherToolDefinition: AIToolDefinition {
+        AIToolDefinition(
+            name: "get_weather",
+            description: "Get current weather for a location.",
+            inputSchemaJSON: """
+            {
+              "type": "object",
+              "properties": {
+                "location": {"type": "string"}
+              },
+              "required": ["location"],
+              "additionalProperties": false
+            }
+            """
+        )
+    }
+
+    func testToolDefinitionRejectsNonObjectSchema() {
+        let definition = AIToolDefinition(
+            name: "invalid",
+            description: "Invalid fixture",
+            inputSchemaJSON: "[1, 2, 3]"
+        )
+
+        XCTAssertThrowsError(
+            try definition.parsedInputSchema()
+        )
+    }
+
+    func testOpenAIProviderNormalizesFunctionCalls() async throws {
+        let responseData = """
+        {
+          "status": "completed",
+          "output": [
+            {
+              "id": "fc_123",
+              "call_id": "call_123",
+              "type": "function_call",
+              "name": "get_weather",
+              "arguments": "{\\\"location\\\":\\\"Paris\\\"}"
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = OpenAIProvider(
+            configuration: OpenAIProviderConfiguration(
+                model: "fixture-openai",
+                baseURL: URL(
+                    string: "https://openai.example/v1"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "openai-token"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(.toolCalling)
+        )
+
+        let response = try await provider.generate(
+            AIRequest(
+                messages: [.user("Weather in Paris?")],
+                requiredCapabilities: [
+                    .textGeneration,
+                    .toolCalling
+                ],
+                tools: [weatherToolDefinition]
+            )
+        )
+
+        XCTAssertEqual(
+            response.finishReason,
+            .toolCallRequested
+        )
+        XCTAssertEqual(response.toolCalls.count, 1)
+        XCTAssertEqual(
+            response.toolCalls.first?.id,
+            "call_123"
+        )
+        XCTAssertEqual(
+            response.toolCalls.first?.name,
+            "get_weather"
+        )
+        XCTAssertEqual(
+            response.toolCalls.first?.argumentsJSON,
+            "{\\\"location\\\":\\\"Paris\\\"}"
+        )
+
+        let request = await transport.lastRequest()
+        let bodyData = try XCTUnwrap(request?.httpBody)
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+        let tools = try XCTUnwrap(
+            body["tools"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            tools.first?["type"] as? String,
+            "function"
+        )
+        XCTAssertEqual(
+            tools.first?["name"] as? String,
+            "get_weather"
+        )
+        XCTAssertNotNil(
+            tools.first?["parameters"] as? [String: Any]
+        )
+    }
+
+    func testAnthropicProviderNormalizesToolUse() async throws {
+        let responseData = """
+        {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_123",
+              "name": "get_weather",
+              "input": {"location": "Paris"}
+            }
+          ],
+          "stop_reason": "tool_use",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 6
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(
+                model: "fixture-claude",
+                baseURL: URL(
+                    string: "https://anthropic.example/v1"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "anthropic-key"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(.toolCalling)
+        )
+
+        let response = try await provider.generate(
+            AIRequest(
+                messages: [.user("Weather in Paris?")],
+                requiredCapabilities: [
+                    .textGeneration,
+                    .toolCalling
+                ],
+                tools: [weatherToolDefinition]
+            )
+        )
+
+        XCTAssertEqual(
+            response.finishReason,
+            .toolCallRequested
+        )
+        XCTAssertEqual(
+            response.toolCalls.first?.id,
+            "toolu_123"
+        )
+        XCTAssertEqual(
+            response.toolCalls.first?.name,
+            "get_weather"
+        )
+        XCTAssertEqual(
+            response.toolCalls.first?.argumentsJSON,
+            "{\\\"location\\\":\\\"Paris\\\"}"
+        )
+
+        let request = await transport.lastRequest()
+        let bodyData = try XCTUnwrap(request?.httpBody)
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+        let tools = try XCTUnwrap(
+            body["tools"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            tools.first?["name"] as? String,
+            "get_weather"
+        )
+        XCTAssertNotNil(
+            tools.first?["input_schema"] as? [String: Any]
+        )
+    }
+
+    func testGeminiProviderNormalizesFunctionCallSteps() async throws {
+        let responseData = """
+        {
+          "status": "completed",
+          "steps": [
+            {
+              "type": "function_call",
+              "id": "call_123",
+              "name": "get_weather",
+              "arguments": {"location": "Paris"}
+            }
+          ],
+          "usage": {
+            "total_input_tokens": 9,
+            "total_output_tokens": 5
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = RecordingHTTPTransport(
+            response: AIHTTPResponse(
+                data: responseData,
+                statusCode: 200
+            )
+        )
+
+        let provider = GeminiProvider(
+            configuration: GeminiProviderConfiguration(
+                model: "fixture-gemini",
+                baseURL: URL(
+                    string: "https://gemini.example"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "gemini-key"
+            ),
+            transport: transport
+        )
+
+        XCTAssertTrue(
+            provider.capabilities.contains(.toolCalling)
+        )
+
+        let response = try await provider.generate(
+            AIRequest(
+                messages: [.user("Weather in Paris?")],
+                requiredCapabilities: [
+                    .textGeneration,
+                    .toolCalling
+                ],
+                tools: [weatherToolDefinition]
+            )
+        )
+
+        XCTAssertEqual(
+            response.finishReason,
+            .toolCallRequested
+        )
+        XCTAssertEqual(
+            response.toolCalls.first?.id,
+            "call_123"
+        )
+        XCTAssertEqual(
+            response.toolCalls.first?.name,
+            "get_weather"
+        )
+        XCTAssertEqual(
+            response.toolCalls.first?.argumentsJSON,
+            "{\\\"location\\\":\\\"Paris\\\"}"
+        )
+
+        let request = await transport.lastRequest()
+        XCTAssertEqual(
+            request?.url?.absoluteString,
+            "https://gemini.example/v1beta/interactions"
+        )
+        let bodyData = try XCTUnwrap(request?.httpBody)
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: bodyData)
+                as? [String: Any]
+        )
+        let tools = try XCTUnwrap(
+            body["tools"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            tools.first?["type"] as? String,
+            "function"
+        )
+        XCTAssertEqual(
+            tools.first?["name"] as? String,
+            "get_weather"
+        )
+        XCTAssertNotNil(
+            tools.first?["parameters"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            body["store"] as? Bool,
+            false
+        )
+    }
+}

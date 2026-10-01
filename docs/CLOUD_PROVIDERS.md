@@ -72,7 +72,7 @@ The provider:
 - advertises streaming only when the injected transport supports `AIHTTPStreamingTransport`;
 - leaves temperature unset by default, so applications opt in explicitly when the selected model supports it;
 - supports native structured generation through `output_config.format`;
-- does not yet advertise tool calling.
+- maps client `tool_use` blocks into normalized `AIToolCall` values.
 
 
 ## Gemini provider
@@ -98,7 +98,8 @@ The provider:
 - uses the Interactions API for native JSON-schema structured generation;
 - explicitly defaults Interactions `store` to `false`;
 - leaves temperature unset by default;
-- does not yet advertise tool, image, or audio capabilities.
+- maps Interactions `function_call` steps into normalized `AIToolCall` values;
+- does not yet advertise image or audio capabilities.
 
 
 ## OpenAI provider
@@ -123,4 +124,4 @@ The provider:
 - streams normalized text deltas from `response.output_text.delta`;
 - derives completion state and usage from terminal Responses API events;
 - supports native JSON-schema structured outputs;
-- deliberately leaves tool calling for AICoreKit's cross-provider normalization layer.
+- maps Responses API `function_call` output items into normalized `AIToolCall` values.
