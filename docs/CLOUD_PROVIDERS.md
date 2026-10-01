@@ -72,7 +72,8 @@ The provider:
 - advertises streaming only when the injected transport supports `AIHTTPStreamingTransport`;
 - leaves temperature unset by default, so applications opt in explicitly when the selected model supports it;
 - supports native structured generation through `output_config.format`;
-- maps client `tool_use` blocks into normalized `AIToolCall` values.
+- maps client `tool_use` blocks into normalized `AIToolCall` values;
+- supports stateless continuation by replaying the assistant content blocks and appending user `tool_result` blocks, including native `is_error` mapping.
 
 
 ## Gemini provider

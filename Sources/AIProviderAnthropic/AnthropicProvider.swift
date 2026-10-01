@@ -2,7 +2,7 @@ import AICore
 import AIHTTP
 import Foundation
 
-public struct AnthropicProvider: AIProvider {
+public struct AnthropicProvider: AIToolContinuingProvider {
     public let configuration: AnthropicProviderConfiguration
 
     private let credentialProvider: any AICredentialProviding
@@ -102,47 +102,14 @@ public struct AnthropicProvider: AIProvider {
             )
         }
 
-        let text = decoded.content
-            .filter { $0.type == "text" }
-            .compactMap(\.text)
-            .joined()
+        let normalized = try makeAIResponse(
+            from: decoded
+        )
 
-        var toolCalls: [AIToolCall] = []
-        for block in decoded.content where block.type == "tool_use" {
-            guard
-                let callID = block.id,
-                let name = block.name,
-                let input = block.input
-            else {
-                throw AIError.decodingFailure(
-                    "Anthropic tool_use block omitted id, name, or input"
-                )
-            }
-
-            toolCalls.append(
-                AIToolCall(
-                    id: callID,
-                    name: name,
-                    argumentsJSON: try input.jsonString()
-                )
-            )
-        }
-
-        guard !text.isEmpty || !toolCalls.isEmpty else {
-            throw AIError.decodingFailure(
-                "Anthropic response did not contain text or tool calls"
-            )
-        }
-
-        return AIResponse(
-            text: text,
-            toolCalls: toolCalls,
-            providerID: id,
-            finishReason:
-                toolCalls.isEmpty
-                ? finishReason(from: decoded.stopReason)
-                : .toolCallRequested,
-            usage: usage(from: decoded.usage)
+        return try attachingToolContinuation(
+            to: normalized,
+            requestData: urlRequest.httpBody,
+            responseData: response.data
         )
     }
 
@@ -361,6 +328,147 @@ public struct AnthropicProvider: AIProvider {
         }
     }
 
+    public func continueToolCalls(
+        _ continuation: AIToolContinuation,
+        outputs: [AIToolOutput]
+    ) async throws -> AIResponse {
+        guard continuation.providerID == id else {
+            throw AIError.invalidRequest(
+                "Anthropic tool continuation belongs to a different provider"
+            )
+        }
+
+        let state = try decodeToolContinuation(
+            continuation
+        )
+
+        guard
+            let requestData = state.requestJSON.data(
+                using: .utf8
+            ),
+            var requestObject =
+                try JSONSerialization.jsonObject(
+                    with: requestData
+                ) as? [String: Any]
+        else {
+            throw AIError.decodingFailure(
+                "Invalid Anthropic continuation request state"
+            )
+        }
+
+        guard
+            let responseData = state.responseJSON.data(
+                using: .utf8
+            ),
+            let responseObject =
+                try JSONSerialization.jsonObject(
+                    with: responseData
+                ) as? [String: Any],
+            let assistantContent =
+                responseObject["content"] as? [Any]
+        else {
+            throw AIError.decodingFailure(
+                "Invalid Anthropic continuation response state"
+            )
+        }
+
+        guard
+            var messages =
+                requestObject["messages"] as? [Any]
+        else {
+            throw AIError.decodingFailure(
+                "Anthropic continuation request did not contain messages"
+            )
+        }
+
+        messages.append(
+            [
+                "role": "assistant",
+                "content": assistantContent
+            ]
+        )
+
+        var resultBlocks: [[String: Any]] = []
+        resultBlocks.reserveCapacity(outputs.count)
+
+        for output in outputs {
+            resultBlocks.append(
+                [
+                    "type": "tool_result",
+                    "tool_use_id": output.callID,
+                    "content": output.content,
+                    "is_error": output.isError
+                ]
+            )
+        }
+
+        messages.append(
+            [
+                "role": "user",
+                "content": resultBlocks
+            ]
+        )
+
+        requestObject["messages"] = messages
+        requestObject["stream"] = false
+
+        let nextRequestData: Data
+        do {
+            nextRequestData = try JSONSerialization.data(
+                withJSONObject: requestObject,
+                options: [.sortedKeys]
+            )
+        } catch {
+            throw AIError.invalidRequest(
+                "Failed to encode Anthropic continuation request"
+            )
+        }
+
+        let urlRequest = try await makeRawURLRequest(
+            body: nextRequestData
+        )
+
+        let response: AIHTTPResponse
+        do {
+            response = try await transport.data(
+                for: urlRequest
+            )
+        } catch is CancellationError {
+            throw AIError.cancelled
+        } catch {
+            throw AIError.transportFailure(
+                error.localizedDescription
+            )
+        }
+
+        try validateHTTPStatus(
+            response.statusCode,
+            data: response.data
+        )
+
+        let decoded: AnthropicMessageResponse
+        do {
+            decoded = try JSONDecoder().decode(
+                AnthropicMessageResponse.self,
+                from: response.data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+
+        let normalized = try makeAIResponse(
+            from: decoded
+        )
+
+        return try attachingToolContinuation(
+            to: normalized,
+            requestData: nextRequestData,
+            responseData: response.data
+        )
+    }
+
     private var credentialRequest: AICredentialRequest {
         AICredentialRequest(
             providerID: id,
@@ -577,6 +685,38 @@ public struct AnthropicProvider: AIProvider {
         return urlRequest
     }
 
+    private func makeRawURLRequest(
+        body: Data
+    ) async throws -> URLRequest {
+        guard let endpointURL else {
+            throw AIError.invalidRequest(
+                "Invalid Anthropic endpoint URL"
+            )
+        }
+
+        let credential = try await requiredCredential()
+
+        var urlRequest = URLRequest(url: endpointURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = configuration.timeout
+        urlRequest.httpBody = body
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        urlRequest.setValue(
+            credential,
+            forHTTPHeaderField:
+                configuration.apiKeyHeaderName
+        )
+        urlRequest.setValue(
+            configuration.apiVersion,
+            forHTTPHeaderField:
+                configuration.apiVersionHeaderName
+        )
+        return urlRequest
+    }
+
     private func requiredCredential() async throws -> String {
         let credential: String
         do {
@@ -687,6 +827,144 @@ public struct AnthropicProvider: AIProvider {
             return .providerFailure(
                 providerID: id,
                 message: message
+            )
+        }
+    }
+
+    private func makeAIResponse(
+        from decoded: AnthropicMessageResponse
+    ) throws -> AIResponse {
+        let text = decoded.content
+            .filter { $0.type == "text" }
+            .compactMap(\.text)
+            .joined()
+
+        var toolCalls: [AIToolCall] = []
+        for block in decoded.content
+            where block.type == "tool_use"
+        {
+            guard
+                let callID = block.id,
+                let name = block.name,
+                let input = block.input
+            else {
+                throw AIError.decodingFailure(
+                    "Anthropic tool_use block omitted id, name, or input"
+                )
+            }
+
+            toolCalls.append(
+                AIToolCall(
+                    id: callID,
+                    name: name,
+                    argumentsJSON:
+                        try input.jsonString()
+                )
+            )
+        }
+
+        guard !text.isEmpty || !toolCalls.isEmpty else {
+            throw AIError.decodingFailure(
+                "Anthropic response did not contain text or tool calls"
+            )
+        }
+
+        return AIResponse(
+            text: text,
+            toolCalls: toolCalls,
+            providerID: id,
+            finishReason:
+                toolCalls.isEmpty
+                ? finishReason(from: decoded.stopReason)
+                : .toolCallRequested,
+            usage: usage(from: decoded.usage)
+        )
+    }
+
+    private func attachingToolContinuation(
+        to response: AIResponse,
+        requestData: Data?,
+        responseData: Data
+    ) throws -> AIResponse {
+        guard !response.toolCalls.isEmpty else {
+            return response
+        }
+
+        guard
+            let requestData,
+            let requestJSON = String(
+                data: requestData,
+                encoding: .utf8
+            ),
+            let responseJSON = String(
+                data: responseData,
+                encoding: .utf8
+            )
+        else {
+            throw AIError.decodingFailure(
+                "Anthropic tool continuation state was not UTF-8"
+            )
+        }
+
+        let state = AnthropicToolContinuationState(
+            requestJSON: requestJSON,
+            responseJSON: responseJSON
+        )
+
+        let stateData: Data
+        do {
+            stateData = try JSONEncoder().encode(state)
+        } catch {
+            throw AIError.decodingFailure(
+                "Failed to encode Anthropic tool continuation state"
+            )
+        }
+
+        guard
+            let opaqueState = String(
+                data: stateData,
+                encoding: .utf8
+            )
+        else {
+            throw AIError.decodingFailure(
+                "Anthropic tool continuation state was not UTF-8"
+            )
+        }
+
+        return AIResponse(
+            text: response.text,
+            toolCalls: response.toolCalls,
+            providerID: response.providerID,
+            finishReason: response.finishReason,
+            usage: response.usage,
+            continuation: AIToolContinuation(
+                providerID: id,
+                opaqueState: opaqueState
+            )
+        )
+    }
+
+    private func decodeToolContinuation(
+        _ continuation: AIToolContinuation
+    ) throws -> AnthropicToolContinuationState {
+        guard
+            let data = continuation.opaqueState.data(
+                using: .utf8
+            )
+        else {
+            throw AIError.decodingFailure(
+                "Anthropic tool continuation state was not UTF-8"
+            )
+        }
+
+        do {
+            return try JSONDecoder().decode(
+                AnthropicToolContinuationState.self,
+                from: data
+            )
+        } catch {
+            throw AIError.decodingFailure(
+                "Invalid Anthropic tool continuation state"
             )
         }
     }

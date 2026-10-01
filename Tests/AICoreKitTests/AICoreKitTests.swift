@@ -2513,3 +2513,156 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testAnthropicProviderContinuesToolLoopStatelessly() async throws {
+        let firstResponse = """
+        {
+          "content": [
+            {
+              "type": "text",
+              "text": "I will check."
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_weather",
+              "name": "get_weather",
+              "input": {"location": "Paris"}
+            }
+          ],
+          "stop_reason": "tool_use",
+          "usage": {
+            "input_tokens": 9,
+            "output_tokens": 5
+          }
+        }
+        """.data(using: .utf8)!
+
+        let secondResponse = """
+        {
+          "content": [
+            {
+              "type": "text",
+              "text": "Paris is 21 C."
+            }
+          ],
+          "stop_reason": "end_turn",
+          "usage": {
+            "input_tokens": 18,
+            "output_tokens": 6
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = SequencedRecordingHTTPTransport(
+            responses: [
+                AIHTTPResponse(
+                    data: firstResponse,
+                    statusCode: 200
+                ),
+                AIHTTPResponse(
+                    data: secondResponse,
+                    statusCode: 200
+                )
+            ]
+        )
+
+        let provider = AnthropicProvider(
+            configuration: AnthropicProviderConfiguration(
+                model: "fixture-claude",
+                baseURL: URL(
+                    string: "https://anthropic.example/v1"
+                )!
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "anthropic-key"
+            ),
+            transport: transport
+        )
+
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+        let tool = WeatherFixtureTool()
+        let toolRegistry = AIToolRegistry(
+            tools: [tool]
+        )
+
+        let response = try await orchestrator.respondWithTools(
+            to: AIRequest(
+                messages: [
+                    .user("What is the weather in Paris?")
+                ],
+                tools: [tool.definition]
+            ),
+            toolRegistry: toolRegistry
+        )
+
+        XCTAssertEqual(
+            response.text,
+            "Paris is 21 C."
+        )
+        XCTAssertEqual(
+            response.providerID,
+            .anthropic
+        )
+        XCTAssertNil(response.continuation)
+
+        let requests = await transport.capturedRequests()
+        XCTAssertEqual(requests.count, 2)
+
+        let secondBodyData = try XCTUnwrap(
+            requests.last?.httpBody
+        )
+        let secondBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: secondBodyData
+            ) as? [String: Any]
+        )
+
+        let messages = try XCTUnwrap(
+            secondBody["messages"] as? [[String: Any]]
+        )
+        XCTAssertEqual(messages.count, 3)
+        XCTAssertEqual(
+            messages[1]["role"] as? String,
+            "assistant"
+        )
+        XCTAssertEqual(
+            messages[2]["role"] as? String,
+            "user"
+        )
+
+        let assistantContent = try XCTUnwrap(
+            messages[1]["content"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            assistantContent.last?["type"] as? String,
+            "tool_use"
+        )
+
+        let toolResults = try XCTUnwrap(
+            messages[2]["content"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            toolResults.first?["type"] as? String,
+            "tool_result"
+        )
+        XCTAssertEqual(
+            toolResults.first?["tool_use_id"] as? String,
+            "toolu_weather"
+        )
+        XCTAssertEqual(
+            toolResults.first?["is_error"] as? Bool,
+            false
+        )
+        XCTAssertEqual(
+            toolResults.first?["content"] as? String,
+            #"{"temperature":21,"unit":"C"}"#
+        )
+    }
+}

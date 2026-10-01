@@ -36,7 +36,7 @@
 
 - [x] Provider-native structured output adapters for OpenAI Responses, Anthropic, and Gemini.
 - [x] Tool-call normalization across OpenAI Responses, Anthropic, and Gemini.
-- [ ] Multi-turn tool orchestration. (Safe core loop and OpenAI Responses stateless continuation complete; Anthropic and Gemini adapters pending.)
+- [ ] Multi-turn tool orchestration. (Safe core loop plus OpenAI Responses and Anthropic stateless continuation complete; Gemini adapter pending.)
 - [ ] Confirmation policies for mutating and destructive tools.
 
 ## 1.0
