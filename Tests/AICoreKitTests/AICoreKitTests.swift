@@ -2666,3 +2666,189 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testGeminiProviderContinuesToolLoopStatelessly() async throws {
+        let firstResponse = """
+        {
+          "status": "completed",
+          "steps": [
+            {
+              "type": "thought",
+              "signature": "thought-signature",
+              "summary": [
+                {
+                  "type": "text",
+                  "text": "Need weather data."
+                }
+              ]
+            },
+            {
+              "type": "function_call",
+              "id": "call_weather",
+              "name": "get_weather",
+              "arguments": {"location": "Paris"}
+            }
+          ],
+          "usage": {
+            "total_input_tokens": 9,
+            "total_output_tokens": 5
+          }
+        }
+        """.data(using: .utf8)!
+
+        let secondResponse = """
+        {
+          "status": "completed",
+          "steps": [
+            {
+              "type": "model_output",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Paris is 21 C."
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "total_input_tokens": 20,
+            "total_output_tokens": 6
+          }
+        }
+        """.data(using: .utf8)!
+
+        let transport = SequencedRecordingHTTPTransport(
+            responses: [
+                AIHTTPResponse(
+                    data: firstResponse,
+                    statusCode: 200
+                ),
+                AIHTTPResponse(
+                    data: secondResponse,
+                    statusCode: 200
+                )
+            ]
+        )
+
+        let provider = GeminiProvider(
+            configuration: GeminiProviderConfiguration(
+                model: "fixture-gemini",
+                baseURL: URL(
+                    string: "https://gemini.example"
+                )!,
+                storeInteractions: false
+            ),
+            credentialProvider: TestCredentialProvider(
+                value: "gemini-key"
+            ),
+            transport: transport
+        )
+
+        let providerRegistry = AIProviderRegistry(
+            providers: [provider]
+        )
+        let orchestrator = DefaultAIOrchestrator(
+            registry: providerRegistry
+        )
+        let tool = WeatherFixtureTool()
+        let toolRegistry = AIToolRegistry(
+            tools: [tool]
+        )
+
+        let response = try await orchestrator.respondWithTools(
+            to: AIRequest(
+                messages: [
+                    .user("What is the weather in Paris?")
+                ],
+                tools: [tool.definition]
+            ),
+            toolRegistry: toolRegistry
+        )
+
+        XCTAssertEqual(
+            response.text,
+            "Paris is 21 C."
+        )
+        XCTAssertEqual(
+            response.providerID,
+            .gemini
+        )
+        XCTAssertNil(response.continuation)
+
+        let requests = await transport.capturedRequests()
+        XCTAssertEqual(requests.count, 2)
+
+        let secondBodyData = try XCTUnwrap(
+            requests.last?.httpBody
+        )
+        let secondBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: secondBodyData
+            ) as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            secondBody["store"] as? Bool,
+            false
+        )
+        XCTAssertNotNil(
+            secondBody["tools"] as? [[String: Any]]
+        )
+
+        let input = try XCTUnwrap(
+            secondBody["input"] as? [[String: Any]]
+        )
+
+        XCTAssertEqual(input.count, 4)
+        XCTAssertEqual(
+            input[0]["type"] as? String,
+            "user_input"
+        )
+        XCTAssertEqual(
+            input[1]["type"] as? String,
+            "thought"
+        )
+        XCTAssertEqual(
+            input[1]["signature"] as? String,
+            "thought-signature"
+        )
+        XCTAssertEqual(
+            input[2]["type"] as? String,
+            "function_call"
+        )
+        XCTAssertEqual(
+            input[2]["id"] as? String,
+            "call_weather"
+        )
+        XCTAssertEqual(
+            input[3]["type"] as? String,
+            "function_result"
+        )
+        XCTAssertEqual(
+            input[3]["call_id"] as? String,
+            "call_weather"
+        )
+        XCTAssertEqual(
+            input[3]["name"] as? String,
+            "get_weather"
+        )
+        XCTAssertEqual(
+            input[3]["is_error"] as? Bool,
+            false
+        )
+
+        let result = try XCTUnwrap(
+            input[3]["result"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            result.first?["type"] as? String,
+            "text"
+        )
+        XCTAssertEqual(
+            result.first?["text"] as? String,
+            #"{"temperature":21,"unit":"C"}"#
+        )
+    }
+}

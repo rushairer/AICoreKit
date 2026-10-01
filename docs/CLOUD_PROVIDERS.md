@@ -100,6 +100,7 @@ The provider:
 - explicitly defaults Interactions `store` to `false`;
 - leaves temperature unset by default;
 - maps Interactions `function_call` steps into normalized `AIToolCall` values;
+- supports stateless multi-turn continuation with `store=false` by replaying the explicit `user_input` step, all model-generated steps exactly as received, and appended `function_result` steps with `is_error` mapping;
 - does not yet advertise image or audio capabilities.
 
 
