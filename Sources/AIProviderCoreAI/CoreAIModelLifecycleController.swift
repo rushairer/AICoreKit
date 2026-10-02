@@ -17,6 +17,11 @@ public enum CoreAIModelLifecycleState:
 }
 
 public actor CoreAIModelLifecycleController {
+    private enum ReadinessRequirement {
+        case prepared
+        case ready
+    }
+
     private let providerID: AIProviderID
     private let bridge: any CoreAIModelLifecycleBridge
     private let resourceProvider:
@@ -165,31 +170,15 @@ public actor CoreAIModelLifecycleController {
     public func preparePersistentResources()
         async throws
     {
-        if
-            state == .prepared
-                || state == .ready
-        {
+        if stateSatisfies(.prepared) {
             return
         }
 
-        if let readinessTask {
-            try await readinessTask.value
+        try await awaitInFlightReadiness(
+            until: .prepared
+        )
 
-            if
-                state == .prepared
-                    || state == .ready
-            {
-                return
-            }
-        }
-
-        let resource =
-            try await requiredResource()
-
-        if await bridge.isPrepared(
-            modelPath: resource.path
-        ) {
-            transition(to: .prepared)
+        if stateSatisfies(.prepared) {
             return
         }
 
@@ -200,7 +189,6 @@ public actor CoreAIModelLifecycleController {
         let task = Task {
             try await self
                 .performPreparePersistent(
-                    resource: resource,
                     expectedGeneration:
                         operationGeneration
                 )
@@ -224,28 +212,16 @@ public actor CoreAIModelLifecycleController {
     public func loadPreparedResources()
         async throws
     {
-        if state == .ready {
+        if stateSatisfies(.ready) {
             return
         }
 
-        if let readinessTask {
-            try await readinessTask.value
+        try await awaitInFlightReadiness(
+            until: .ready
+        )
 
-            if state == .ready {
-                return
-            }
-        }
-
-        let resource =
-            try await requiredResource()
-
-        guard await bridge.isPrepared(
-            modelPath: resource.path
-        ) else {
-            transition(to: .notPrepared)
-            throw AIError.unavailable(
-                .modelNotReady
-            )
+        if stateSatisfies(.ready) {
+            return
         }
 
         let operationGeneration =
@@ -254,8 +230,7 @@ public actor CoreAIModelLifecycleController {
             allocateReadinessTaskID()
         let task = Task {
             try await self
-                .performLoadPrepared(
-                    resource: resource,
+                .performLoadPreparedResources(
                     expectedGeneration:
                         operationGeneration
                 )
@@ -277,16 +252,16 @@ public actor CoreAIModelLifecycleController {
     }
 
     public func ensureReady() async throws {
-        if state == .ready {
+        if stateSatisfies(.ready) {
             return
         }
 
-        if let readinessTask {
-            try await readinessTask.value
+        try await awaitInFlightReadiness(
+            until: .ready
+        )
 
-            if state == .ready {
-                return
-            }
+        if stateSatisfies(.ready) {
+            return
         }
 
         let operationGeneration =
@@ -319,26 +294,16 @@ public actor CoreAIModelLifecycleController {
     public func bootstrapIfPrepared()
         async throws -> Bool
     {
-        if state == .ready {
+        if stateSatisfies(.ready) {
             return true
         }
 
-        if let readinessTask {
-            try await readinessTask.value
+        try await awaitInFlightReadiness(
+            until: .ready
+        )
 
-            if state == .ready {
-                return true
-            }
-        }
-
-        let resource =
-            try await requiredResource()
-
-        guard await bridge.isPrepared(
-            modelPath: resource.path
-        ) else {
-            transition(to: .notPrepared)
-            return false
+        if stateSatisfies(.ready) {
+            return true
         }
 
         let operationGeneration =
@@ -346,11 +311,11 @@ public actor CoreAIModelLifecycleController {
         let taskID =
             allocateReadinessTaskID()
         let task = Task {
-            try await self.performLoadPrepared(
-                resource: resource,
-                expectedGeneration:
-                    operationGeneration
-            )
+            try await self
+                .performBootstrapIfPrepared(
+                    expectedGeneration:
+                        operationGeneration
+                )
         }
         readinessTask = task
         readinessTaskID = taskID
@@ -360,7 +325,9 @@ public actor CoreAIModelLifecycleController {
             clearReadinessTask(
                 ifID: taskID
             )
-            return true
+            return stateSatisfies(
+                .ready
+            )
         } catch {
             clearReadinessTask(
                 ifID: taskID
@@ -477,9 +444,15 @@ public actor CoreAIModelLifecycleController {
     }
 
     private func performPreparePersistent(
-        resource: CoreAIModelResource,
         expectedGeneration: UInt64
     ) async throws {
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        let resource =
+            try await requiredResource()
+
         try ensureCurrent(
             expectedGeneration
         )
@@ -515,6 +488,78 @@ public actor CoreAIModelLifecycleController {
             transition(to: .failed)
             throw error
         }
+    }
+
+    private func performLoadPreparedResources(
+        expectedGeneration: UInt64
+    ) async throws {
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        let resource =
+            try await requiredResource()
+
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        guard await bridge.isPrepared(
+            modelPath: resource.path
+        ) else {
+            try ensureCurrent(
+                expectedGeneration
+            )
+            transition(to: .notPrepared)
+            throw AIError.unavailable(
+                .modelNotReady
+            )
+        }
+
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        try await performLoadPrepared(
+            resource: resource,
+            expectedGeneration:
+                expectedGeneration
+        )
+    }
+
+    private func performBootstrapIfPrepared(
+        expectedGeneration: UInt64
+    ) async throws {
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        let resource =
+            try await requiredResource()
+
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        guard await bridge.isPrepared(
+            modelPath: resource.path
+        ) else {
+            try ensureCurrent(
+                expectedGeneration
+            )
+            transition(to: .notPrepared)
+            return
+        }
+
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        try await performLoadPrepared(
+            resource: resource,
+            expectedGeneration:
+                expectedGeneration
+        )
     }
 
     private func performEnsureReady(
@@ -598,6 +643,50 @@ public actor CoreAIModelLifecycleController {
         } catch {
             transition(to: .failed)
             throw error
+        }
+    }
+
+    private func stateSatisfies(
+        _ requirement:
+            ReadinessRequirement
+    ) -> Bool {
+        switch requirement {
+        case .prepared:
+            return
+                state == .prepared
+                || state == .ready
+        case .ready:
+            return state == .ready
+        }
+    }
+
+    private func awaitInFlightReadiness(
+        until requirement:
+            ReadinessRequirement
+    ) async throws {
+        while !stateSatisfies(
+            requirement
+        ) {
+            guard
+                let task = readinessTask,
+                let taskID =
+                    readinessTaskID
+            else {
+                return
+            }
+
+            do {
+                try await task.value
+            } catch {
+                clearReadinessTask(
+                    ifID: taskID
+                )
+                throw error
+            }
+
+            clearReadinessTask(
+                ifID: taskID
+            )
         }
     }
 
