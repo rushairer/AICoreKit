@@ -232,6 +232,7 @@ FateAtlas now pins AICoreKit `f6660787` through `Packages/AppAIKit`. AppAIKit re
 Current cloud-provider state:
 
 - AppAIKit depends directly on `AICore` and `AIProviderConfiguration`; it no longer needs direct target dependencies on the OpenAI, Anthropic, or OpenAI-compatible provider modules;
+- FateAtlas keeps ordinary provider/model/base-URL/strategy preferences in product-owned UserDefaults, but API credentials are now stored in Keychain; legacy plaintext UserDefaults credentials are migrated lazily and removed only after the secure write succeeds;
 - `OpenAIResponsesProvider`, `AnthropicProvider`, and `OpenAICompatibleProvider` preserve their existing FateAtlas-facing APIs while internally building `AIProviderProfile` values and delegating provider construction to `AIConfiguredProviderFactory`;
 - profile construction preserves FateAtlas's existing endpoint, model, provider identity, timeout, maximum-output-token, and temperature semantics;
 - first-party OpenAI generation and connection testing now both execute through the Responses API path;
