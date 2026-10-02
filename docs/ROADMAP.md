@@ -21,6 +21,7 @@
 - [x] Add a Qwen3-0.6B export and integration fixture without shipping model assets.
 - [x] Build and validate the iOS 27 runtime framework artifact on an Xcode 27 CI runner.
 - [x] Add a lower-minimum Mach-O host fixture that proves the runtime is weak-linked.
+- [x] Add a Swift 5 language-mode consumer fixture for the lifecycle API used by lower-minimum host apps.
 - [ ] Validate a signed app on a lower OS, iOS 27 inference, Release archive, memory, cancellation, and thermal behavior.
 
 ## 0.3 Cloud providers
@@ -44,5 +45,5 @@
 
 - [x] Stable semantic versioning contract.
 - [x] Migration guides for ColorCamera and FateAtlas.
-- [ ] At least three production consumers.
+- [ ] At least three production consumers. FateAtlas is the first validated Release-build consumer; ColorCamera and MetronomePro remain in production validation.
 - [x] Compatibility matrix and provider conformance suite.

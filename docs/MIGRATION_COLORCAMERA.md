@@ -64,9 +64,9 @@ Do not delete ColorCamera's current AI code until these differences are resolved
 | --- | --- | --- | --- |
 | Apple structured output | Native `@Generable` product schema | Apple provider advertises text generation only | Keep the ColorCamera Apple adapter until AICoreKit has an equally reliable native structured extension, or intentionally keep this adapter permanently as a product-specific provider. |
 | Core AI ABI | `CCACoreAIAnalyze/Prewarm/Reset` with product JSON and progress | Generic `AICKCoreAIGenerate/Prepare/Unload` ABI | Do not swap binaries in place. Introduce an adapter/runtime migration with explicit parity tests. |
-| Progress | Preparing/loading/warming/generating stages | Generic provider response has no model-progress channel | Keep ColorCamera progress coordination until a reusable progress contract exists. |
-| Preparation semantics | Persistent preparation is separate from runtime loading; app tracks prepared/ready states | Generic lifecycle exposes prepare/release | Verify semantic equivalence before replacing ColorCamera initialization state. |
-| Reset | Product exposes runtime cache reset | Generic lifecycle currently exposes unload/release, not the same UX contract | Preserve reset behavior or add a reusable runtime-reset extension first. |
+| Progress | Preparing/loading/warming/generating stages | Generic provider response still has no model-progress channel | Keep ColorCamera generation/progress coordination until a reusable progress contract is justified. The current Settings initialization UI uses discrete preparing/loading states rather than percentage progress. |
+| Preparation semantics | Persistent preparation is separate from runtime loading; app tracks prepared/ready states | `CoreAIModelLifecycleController` now distinguishes persistent preparation, process loading, ready state, launch-safe bootstrap, and cache clearing | Lifecycle coordination has migrated; keep ColorCamera's product-facing state labels/UI only. |
+| Reset | Product distinguishes runtime unload from clearing persistent first-use preparation | Generic lifecycle now exposes `unload()` and `clearPreparationCache()` as separate operations, with stale completion invalidation | Product UI can delegate these operations to AICoreKit while retaining ColorCamera wording and confirmation UX. |
 | Domain validation | Strong post-generation language/role validation | Provider-neutral | Must remain in ColorCamera. |
 
 ## Recommended migration sequence
@@ -186,3 +186,21 @@ ColorCamera's latest local-model work established several lifecycle rules that a
 - concurrent first use, settings initialization, and generation requests share one readiness operation instead of launching duplicate model loads.
 
 When ColorCamera migrates its Core AI provider, its product-specific initialization UI may remain, but the `CoreAIModelPrewarmer` and low-level preparation/load/cache bookkeeping should be replaced by `CoreAIModelLifecycleController` / `CoreAIProvider`.
+
+
+## Migration status update — 2026-10-02
+
+ColorCamera has completed the first real lifecycle-infrastructure adoption:
+
+- main `5e8084a4` pins AICoreKit `590a67a4`;
+- the iOS 26 host links only `AICore` and `AIProviderCoreAI`;
+- `CoreAIModelPrewarmer` delegates lifecycle coordination to `CoreAIModelLifecycleController`;
+- persistent preparation and current-process residency remain separate;
+- app launch uses `bootstrapIfPrepared()`, which never triggers first-use preparation on an unprepared model;
+- runtime unload and persistent preparation-cache clearing are distinct;
+- concurrent readiness work is coalesced and reset/cache-clear invalidates stale native completions;
+- a Swift 5 consumer fixture now protects the host-language compatibility used by ColorCamera.
+
+The product-specific `ColorCameraCoreAI` generation/repair runtime remains intentionally in place. This is an incremental migration, not an attempt to erase the product adapter.
+
+ColorCamera's Xcode Cloud status is currently not a clean acceptance signal because the workflow was already failing on the pre-migration baseline `ca333dd1` and earlier commits. Resolve that historical CI/release issue independently, then complete signed iOS 26/iOS 27 device and Release archive validation.
