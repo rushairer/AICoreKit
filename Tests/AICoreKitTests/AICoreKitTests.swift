@@ -3581,8 +3581,10 @@ extension AICoreKitTests {
             try await controller
                 .bootstrapIfPrepared()
         XCTAssertTrue(bootstrapped)
+        let readyState =
+            await controller.currentState()
         XCTAssertEqual(
-            await controller.currentState(),
+            readyState,
             .ready
         )
 
@@ -3639,8 +3641,10 @@ extension AICoreKitTests {
                 .bootstrapIfPrepared()
 
         XCTAssertFalse(bootstrapped)
+        let bootstrapState =
+            await controller.currentState()
         XCTAssertEqual(
-            await controller.currentState(),
+            bootstrapState,
             .notPrepared
         )
 
@@ -3712,8 +3716,10 @@ extension AICoreKitTests {
             counts.load,
             1
         )
+        let coalescedState =
+            await controller.currentState()
         XCTAssertEqual(
-            await controller.currentState(),
+            coalescedState,
             .ready
         )
     }
@@ -3759,13 +3765,17 @@ extension AICoreKitTests {
         try await controller
             .clearPreparationCache()
 
+        let clearedState =
+            await controller.currentState()
+        let isPrepared =
+            await controller
+                .isPersistentlyPrepared()
         XCTAssertEqual(
-            await controller.currentState(),
+            clearedState,
             .notPrepared
         )
         XCTAssertFalse(
-            await controller
-                .isPersistentlyPrepared()
+            isPrepared
         )
 
         let counts =
