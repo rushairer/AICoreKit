@@ -39,7 +39,7 @@ ColorCamera should not be forced to remove its product-specific `@Generable` App
 
 Current adoption evidence as of 2026-10-02:
 
-- ColorCamera main `41e879d9` pins the validated AICoreKit baseline `aec04e32` and links only the host-safe `AICore` + `AIProviderCoreAI` products into the iOS 26 app target.
+- ColorCamera main `0457ac37` pins the validated AICoreKit baseline `398a10f9` and links only the host-safe `AICore` + `AIProviderCoreAI` products into the iOS 26 app target.
 - The existing `CoreAIModelPrewarmer` is now a product facade over AICoreKit's `CoreAIModelLifecycleController`; persistent preparation inspection, launch-safe bootstrap, shared readiness, runtime unload, preparation-cache clearing, and stale-completion invalidation are coordinated by AICoreKit.
 - The iOS 27 `ColorCameraCoreAI` framework remains product-specific for palette generation and repair. The migration intentionally does not import AICoreKit's higher-minimum runtime into the iOS 26 host.
 - ColorCamera main `294ca270` splits its product C ABI into `CCACoreAIPrepare` (persistent `PreparedModel.prepare`) and `CCACoreAILoad` (process-resident eager load); `CCACoreAIReset` unloads without clearing preparation, `CCACoreAIClearPreparationCache` removes persistent specialization, and legacy `CCACoreAIPrewarm` remains only as prepare-if-needed + load compatibility.
@@ -48,6 +48,7 @@ Current adoption evidence as of 2026-10-02:
 - The Compatibility Lab now also archives a minimal iOS 26 application that weak-links and embeds the iOS 27 Core AI runtime. Xcode 27 Release archive succeeds with app `MinimumOSVersion = 26.0`, runtime `MinimumOSVersion = 27.0`, `LC_LOAD_WEAK_DYLIB`, and the weak C ABI reference intact. This proves the cross-version archive topology independently from ColorCamera; it does not replace ColorCamera's signed-device/App Store distribution gate.
 - ColorCamera's release gate checks the immutable AICoreKit revision in both the Xcode project and committed `Package.resolved`; the resolved-file origin hash was also updated for the new top-level dependency graph.
 - ColorCamera DEBUG device diagnostics now consume AICoreKit's persistent-preparation evidence (`preparedBeforeRun`, `preparedAfterPrepare`, `preparedAfterRelease`, and `coldPreparationPerformed`), so a warm preparation-cache hit cannot be mistaken for a first-use preparation measurement.
+- The copied diagnostic report is now self-describing: AICoreKit records hardware model, process architecture, and OS version, while ColorCamera adds application version/build, `Qwen/Qwen3-0.6B`, and the diagnostic feature identifier without collecting user identifiers.
 - ColorCamera Xcode Cloud was already failing on the pre-migration baseline `ca333dd1` and several earlier commits. The current Xcode Cloud failure therefore remains a separate historical CI/release issue rather than evidence that the AICoreKit lifecycle migration introduced a regression.
 - The product Core AI runtime/archive boundary is now validated, but a full ColorCamera production target Release/archive with signing/distribution evidence and signed-device iOS 26/iOS 27 validation are still required before ColorCamera counts as a completed production consumer.
 
