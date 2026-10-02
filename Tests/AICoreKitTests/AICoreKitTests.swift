@@ -4002,9 +4002,11 @@ extension AICoreKitTests {
             counts.load,
             1
         )
-        XCTAssertEqual(
+        let readyState =
             await controller
-                .currentState(),
+            .currentState()
+        XCTAssertEqual(
+            readyState,
             .ready
         )
     }
