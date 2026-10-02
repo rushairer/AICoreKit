@@ -192,15 +192,17 @@ When ColorCamera migrates its Core AI provider, its product-specific initializat
 
 ColorCamera has completed the first real lifecycle-infrastructure adoption:
 
-- main `5e8084a4` pins AICoreKit `590a67a4`;
+- main `be6c77e2` pins the validated AICoreKit baseline `794abcbd`;
 - the iOS 26 host links only `AICore` and `AIProviderCoreAI`;
 - `CoreAIModelPrewarmer` delegates lifecycle coordination to `CoreAIModelLifecycleController`;
 - persistent preparation and current-process residency remain separate;
 - app launch uses `bootstrapIfPrepared()`, which never triggers first-use preparation on an unprepared model;
 - runtime unload and persistent preparation-cache clearing are distinct;
 - concurrent readiness work is coalesced and reset/cache-clear invalidates stale native completions;
-- a Swift 5 consumer fixture now protects the host-language compatibility used by ColorCamera.
+- a Swift 5 consumer fixture now protects the host-language compatibility used by ColorCamera;
+- the product C ABI now mirrors AICoreKit lifecycle semantics directly: `CCACoreAIPrepare` performs persistent preparation, `CCACoreAILoad` performs process loading, `CCACoreAIReset` unloads residency, and `CCACoreAIClearPreparationCache` removes persistent preparation; `CCACoreAIPrewarm` remains compatibility-only;
+- Xcode 27 product Core AI Release archive passes after this split, and the iOS 26 host fixture proves `IsAvailable`, `Prepare`, and `Load` all remain weak references.
 
 The product-specific `ColorCameraCoreAI` generation/repair runtime remains intentionally in place. This is an incremental migration, not an attempt to erase the product adapter.
 
-ColorCamera's Xcode Cloud status is currently not a clean acceptance signal because the workflow was already failing on the pre-migration baseline `ca333dd1` and earlier commits. Resolve that historical CI/release issue independently, then complete signed iOS 26/iOS 27 device and Release archive validation.
+ColorCamera's product Core AI archive boundary is now validated independently from the historical Xcode Cloud failure. Xcode Cloud was already failing on the pre-migration baseline `ca333dd1` and earlier commits, so that remains a separate app-level CI/release issue. The remaining production gate is a full signed ColorCamera Release/archive/distribution path plus signed iOS 26/iOS 27 device validation.
