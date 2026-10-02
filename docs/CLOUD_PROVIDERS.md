@@ -210,3 +210,19 @@ let transport = RetryingAIHTTPTransport(
 To observe one logical request including all retry time, put `ObservingAIHTTPTransport` outside the retry wrapper instead.
 
 A production gateway should additionally use its own request ID or vendor-supported idempotency mechanism when duplicate remote work would be unacceptable.
+
+
+## Reusable provider configuration
+
+`AIProviderConfiguration` centralizes technical cloud-provider configuration without taking ownership of product settings UI or secret persistence.
+
+It provides:
+
+- `AIProviderProfile` for validated provider/model/base-URL metadata;
+- `AIProviderPreset` for OpenAI, Anthropic, Gemini, DeepSeek, and custom OpenAI-compatible endpoints;
+- `AIConfiguredProviderFactory` for constructing the matching AICoreKit provider;
+- `AIProviderConnectionTester` for availability checks and explicit low-token generation probes.
+
+Applications remain responsible for user-facing provider names/policy, whether cloud execution is enabled, model-selection UX, and storage of credentials. API keys should normally live in Keychain or behind an application gateway, not in `UserDefaults`.
+
+Consumer code should prefer these shared profiles/factories over rebuilding vendor endpoint/header semantics independently.
