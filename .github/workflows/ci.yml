@@ -16,6 +16,8 @@ jobs:
         run: swift --version
       - name: Test root package
         run: swift test
+      - name: Build Swift 5 lifecycle consumer fixture
+        run: swift build --package-path CompatibilityLab/Swift5LifecycleConsumer
 
   coreai-runtime-build:
     runs-on: xcode-27
