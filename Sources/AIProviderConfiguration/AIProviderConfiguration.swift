@@ -20,6 +20,159 @@ public enum AIProviderProfileKind:
     case openAICompatible
 }
 
+
+public enum AIProviderPreset:
+    String,
+    CaseIterable,
+    Codable,
+    Sendable,
+    Equatable,
+    Hashable,
+    Identifiable
+{
+    case openAI
+    case anthropic
+    case gemini
+    case deepSeek
+    case customOpenAICompatible
+
+    public var id: String {
+        rawValue
+    }
+
+    public var displayName: String {
+        switch self {
+        case .openAI:
+            return "OpenAI"
+        case .anthropic:
+            return "Anthropic"
+        case .gemini:
+            return "Gemini"
+        case .deepSeek:
+            return "DeepSeek"
+        case .customOpenAICompatible:
+            return "OpenAI Compatible"
+        }
+    }
+
+    public var kind:
+        AIProviderProfileKind
+    {
+        switch self {
+        case .openAI:
+            return .openAI
+        case .anthropic:
+            return .anthropic
+        case .gemini:
+            return .gemini
+        case .deepSeek,
+             .customOpenAICompatible:
+            return .openAICompatible
+        }
+    }
+
+    public var providerID:
+        AIProviderID
+    {
+        switch self {
+        case .openAI:
+            return .openAI
+        case .anthropic:
+            return .anthropic
+        case .gemini:
+            return .gemini
+        case .deepSeek:
+            return AIProviderID(
+                rawValue: "deepseek"
+            )
+        case .customOpenAICompatible:
+            return .openAICompatible
+        }
+    }
+
+    public var defaultBaseURL: URL? {
+        switch self {
+        case .openAI:
+            return URL(
+                string:
+                    "https://api.openai.com/v1"
+            )
+        case .anthropic:
+            return URL(
+                string:
+                    "https://api.anthropic.com/v1"
+            )
+        case .gemini:
+            return URL(
+                string:
+                    "https://generativelanguage.googleapis.com"
+            )
+        case .deepSeek:
+            return URL(
+                string:
+                    "https://api.deepseek.com/v1"
+            )
+        case .customOpenAICompatible:
+            return nil
+        }
+    }
+
+    public var credentialKind:
+        AICredentialKind
+    {
+        switch self {
+        case .anthropic,
+             .gemini:
+            return .apiKey
+        case .openAI,
+             .deepSeek,
+             .customOpenAICompatible:
+            return .bearerToken
+        }
+    }
+
+    public func profile(
+        id: String,
+        model: String,
+        baseURL: URL? = nil,
+        displayName:
+            String? = nil,
+        providerID:
+            AIProviderID? = nil
+    ) throws -> AIProviderProfile {
+        guard
+            let resolvedBaseURL =
+                baseURL
+                ?? defaultBaseURL
+        else {
+            throw AIProviderProfileValidationError
+                .missingHost
+        }
+
+        let profile =
+            AIProviderProfile(
+                id: id,
+                kind: kind,
+                providerID:
+                    providerID
+                    ?? self.providerID,
+                displayName:
+                    displayName
+                    ?? self.displayName,
+                model: model,
+                baseURL:
+                    resolvedBaseURL,
+                credentialKind:
+                    credentialKind
+            )
+
+        try AIProviderProfileValidator
+            .validate(profile)
+
+        return profile
+    }
+}
+
 public struct AIProviderProfile:
     Identifiable,
     Codable,
