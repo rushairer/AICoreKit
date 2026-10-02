@@ -29,7 +29,7 @@ It is designed around capabilities rather than vendors, so product code can use 
 - `AIProviderGemini` — optional Gemini provider using Generate Content for text/streaming and Interactions for native structured generation, normalized tool calls, and multi-turn tool continuation.
 - `AIProviderOpenAI` — optional OpenAI Responses API provider with text, SSE streaming, native structured generation, normalized tool calls, and multi-turn tool continuation.
 - `AIProviderConfiguration` — reusable cloud-provider profiles, built-in OpenAI/Anthropic/Gemini/DeepSeek/custom presets, validation, provider construction, and explicit connection probes. Products still own settings UI and credential persistence.
-- `AICoreKit` — convenience umbrella module.
+- `AICoreKit` — convenience non-cloud umbrella for core contracts, orchestration/tools, Apple Foundation Models, and the host-safe Core AI boundary. Cloud providers and `AIProviderConfiguration` remain explicit opt-in products so importing the umbrella does not pull every vendor adapter into an app.
 
 Cloud provider foundations now cover OpenAI-compatible, Anthropic, Gemini, and the OpenAI Responses API. OpenAI Responses, Anthropic, and Gemini also share provider-native structured output, normalized tool calls, stateless multi-turn tool continuation, and application-owned confirmation policies.
 
@@ -133,6 +133,6 @@ Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Cloud providers
 
-Cloud integrations are optional package products. The first cloud adapter, `AIProviderOpenAICompatible`, uses injected credentials and an injected `AIHTTPTransport`; it does not persist API keys or force cloud networking into the `AICoreKit` umbrella product.
+Cloud integrations are optional package products. `AIProviderConfiguration` is also opt-in because its factory can construct all supported cloud-provider families and therefore depends on those adapter targets. None of these cloud products persist API keys or force cloud networking into the `AICoreKit` umbrella product.
 
 See [docs/CLOUD_PROVIDERS.md](docs/CLOUD_PROVIDERS.md).
