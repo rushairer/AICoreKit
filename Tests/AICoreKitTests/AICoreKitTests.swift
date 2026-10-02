@@ -4184,6 +4184,9 @@ extension AICoreKitTests {
         _ = try await controller
             .bootstrapIfPrepared()
 
+        let stream =
+            await controller.stateChanges()
+
         do {
             try await controller.unload()
             XCTFail(
@@ -4202,11 +4205,35 @@ extension AICoreKitTests {
             }
         }
 
-        let state =
+        var iterator =
+            stream.makeAsyncIterator()
+        var states:
+            [CoreAIModelLifecycleState] = []
+
+        for _ in 0..<2 {
+            if let value =
+                await iterator.next()
+            {
+                states.append(value)
+            }
+        }
+
+        XCTAssertEqual(
+            states,
+            [
+                .ready,
+                .failed
+            ]
+        )
+
+        // A later explicit refresh may recover to the still-persistently
+        // prepared state. The important contract is that the failed
+        // operation itself is observable.
+        let refreshedState =
             await controller.currentState()
         XCTAssertEqual(
-            state,
-            .failed
+            refreshedState,
+            .prepared
         )
     }
 }
