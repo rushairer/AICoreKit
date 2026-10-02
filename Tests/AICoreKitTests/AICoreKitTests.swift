@@ -265,6 +265,80 @@ private struct LifecycleStubCoreAIBridge: CoreAIModelLifecycleBridge {
 }
 
 extension AICoreKitTests {
+    @MainActor
+    func testCoreAIModelSettingsStoreSharesProfileAndLifecycle() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let profile =
+            CoreAIModelProfile(
+                identifier:
+                    "fixture.settings",
+                displayName:
+                    "Fixture Settings Model",
+                sourceIdentifier:
+                    "fixture/source"
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge:
+                    LifecycleStubCoreAIBridge(),
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    profile.identifier,
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+        let store =
+            CoreAIModelSettingsStore(
+                profile:
+                    profile,
+                lifecycleController:
+                    controller
+            )
+
+        XCTAssertEqual(
+            store.profile,
+            profile
+        )
+        XCTAssertEqual(
+            await store.refreshState(),
+            .notPrepared
+        )
+
+        try await store.ensureReady()
+
+        XCTAssertEqual(
+            await store.refreshState(),
+            .ready
+        )
+
+        try await store.unload()
+
+        XCTAssertEqual(
+            await store.refreshState(),
+            .notPrepared
+        )
+    }
+
     func testCoreAIProviderPreparesAndReleasesResources() async throws {
         let temporaryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
