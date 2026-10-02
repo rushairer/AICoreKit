@@ -188,7 +188,9 @@ final class AIProviderConfigurationTests:
             {
               "id": "legacy",
               "kind": "openAI",
-              "providerID": "openai",
+              "providerID": {
+                "rawValue": "openai"
+              },
               "displayName": "OpenAI",
               "model": "gpt-5",
               "baseURL": "https://api.openai.com/v1",
