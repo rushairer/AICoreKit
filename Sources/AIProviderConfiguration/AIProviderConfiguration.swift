@@ -138,7 +138,13 @@ public enum AIProviderPreset:
         displayName:
             String? = nil,
         providerID:
-            AIProviderID? = nil
+            AIProviderID? = nil,
+        timeout:
+            TimeInterval = 60,
+        defaultMaxOutputTokens:
+            Int? = nil,
+        defaultTemperature:
+            Double? = nil
     ) throws -> AIProviderProfile {
         guard
             let resolvedBaseURL =
@@ -163,7 +169,13 @@ public enum AIProviderPreset:
                 baseURL:
                     resolvedBaseURL,
                 credentialKind:
-                    credentialKind
+                    credentialKind,
+                timeout:
+                    timeout,
+                defaultMaxOutputTokens:
+                    defaultMaxOutputTokens,
+                defaultTemperature:
+                    defaultTemperature
             )
 
         try AIProviderProfileValidator
@@ -186,6 +198,9 @@ public struct AIProviderProfile:
     public var model: String
     public var baseURL: URL
     public var credentialKind: AICredentialKind
+    public var timeout: TimeInterval
+    public var defaultMaxOutputTokens: Int?
+    public var defaultTemperature: Double?
 
     public init(
         id: String,
@@ -194,7 +209,10 @@ public struct AIProviderProfile:
         displayName: String,
         model: String,
         baseURL: URL,
-        credentialKind: AICredentialKind
+        credentialKind: AICredentialKind,
+        timeout: TimeInterval = 60,
+        defaultMaxOutputTokens: Int? = nil,
+        defaultTemperature: Double? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -203,6 +221,11 @@ public struct AIProviderProfile:
         self.model = model
         self.baseURL = baseURL
         self.credentialKind = credentialKind
+        self.timeout = timeout
+        self.defaultMaxOutputTokens =
+            defaultMaxOutputTokens
+        self.defaultTemperature =
+            defaultTemperature
     }
 }
 
@@ -313,6 +336,9 @@ public enum AIProviderProfileValidationError:
     case unsupportedURLScheme
     case missingHost
     case incompatibleCredentialKind
+    case invalidTimeout
+    case invalidMaxOutputTokens
+    case invalidTemperature
 
     public var errorDescription:
         String?
@@ -334,6 +360,12 @@ public enum AIProviderProfileValidationError:
             return "Provider URL must include a valid host."
         case .incompatibleCredentialKind:
             return "Credential kind is incompatible with the provider protocol."
+        case .invalidTimeout:
+            return "Provider timeout must be greater than zero."
+        case .invalidMaxOutputTokens:
+            return "Default max output tokens must be greater than zero when provided."
+        case .invalidTemperature:
+            return "Default temperature must be a finite number when provided."
         }
     }
 }
@@ -405,6 +437,29 @@ public enum AIProviderProfileValidator {
                 .missingHost
         }
 
+        guard profile.timeout > 0 else {
+            throw AIProviderProfileValidationError
+                .invalidTimeout
+        }
+
+        if
+            let maxOutputTokens =
+                profile.defaultMaxOutputTokens,
+            maxOutputTokens <= 0
+        {
+            throw AIProviderProfileValidationError
+                .invalidMaxOutputTokens
+        }
+
+        if
+            let temperature =
+                profile.defaultTemperature,
+            !temperature.isFinite
+        {
+            throw AIProviderProfileValidationError
+                .invalidTemperature
+        }
+
         switch profile.kind {
         case .openAI:
             guard
@@ -469,7 +524,13 @@ public struct AIConfiguredProviderFactory:
                         model:
                             profile.model,
                         baseURL:
-                            profile.baseURL
+                            profile.baseURL,
+                        timeout:
+                            profile.timeout,
+                        defaultMaxOutputTokens:
+                            profile.defaultMaxOutputTokens,
+                        defaultTemperature:
+                            profile.defaultTemperature
                     ),
                 credentialProvider:
                     credentialProvider,
@@ -488,7 +549,14 @@ public struct AIConfiguredProviderFactory:
                         model:
                             profile.model,
                         baseURL:
-                            profile.baseURL
+                            profile.baseURL,
+                        timeout:
+                            profile.timeout,
+                        defaultMaxOutputTokens:
+                            profile.defaultMaxOutputTokens
+                            ?? 1024,
+                        defaultTemperature:
+                            profile.defaultTemperature
                     ),
                 credentialProvider:
                     credentialProvider,
@@ -507,7 +575,13 @@ public struct AIConfiguredProviderFactory:
                         model:
                             profile.model,
                         baseURL:
-                            profile.baseURL
+                            profile.baseURL,
+                        timeout:
+                            profile.timeout,
+                        defaultMaxOutputTokens:
+                            profile.defaultMaxOutputTokens,
+                        defaultTemperature:
+                            profile.defaultTemperature
                     ),
                 credentialProvider:
                     credentialProvider,
@@ -527,6 +601,12 @@ public struct AIConfiguredProviderFactory:
                             profile.baseURL,
                         model:
                             profile.model,
+                        timeout:
+                            profile.timeout,
+                        defaultMaxOutputTokens:
+                            profile.defaultMaxOutputTokens,
+                        defaultTemperature:
+                            profile.defaultTemperature,
                         credentialKind:
                             profile.credentialKind
                     ),
