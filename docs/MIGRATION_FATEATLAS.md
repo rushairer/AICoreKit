@@ -243,13 +243,14 @@ Phase 3 has now started for structured generation:
 - Zodiac, astrology, and BaZi enhancement payloads now provide explicit schemas and use AICoreKit's native Anthropic structured-output adapter when the selected remote protocol is Anthropic.
 - The three payload DTOs are explicitly `nonisolated` because the FateAtlas app target uses MainActor default isolation while AICoreKit correctly requires structured outputs to be `Decodable & Sendable`.
 - AppAIKit tests and the full code-signing-disabled Release generic iOS build both pass after this change.
-- OpenAI-compatible/DeepSeek/custom structured generation intentionally keeps the validated prompt/JSON fallback; AICoreKit does not advertise a schema capability for a generic compatible endpoint.
+- FateAtlas main `cc357684` separates first-party OpenAI from the compatibility bucket. OpenAI chat/streaming now uses AICoreKit `AIProviderOpenAI` and the Responses API, while schema-backed enhancement requests use that provider's native structured generation with `store=false`.
+- DeepSeek/custom structured generation intentionally keeps the validated prompt/JSON fallback through `AIProviderOpenAICompatible`; AICoreKit does not advertise a schema capability for a generic compatible endpoint.
 - Apple local structured generation also remains the existing product fallback until a reusable native contract is justified.
 
 The migration is intentionally incomplete:
 
 - `fetchModels()` and connection testing remain product-owned;
-- dedicated OpenAI Responses structured generation has not yet replaced FateAtlas's generic OpenAI-compatible path;
+- model-list and connection-test UX still use product-owned compatibility helpers even though OpenAI generation itself now uses Responses;
 - Apple local execution and the broader orchestration layer have not yet been collapsed into AICoreKit;
 - `Packages/AppAIKit` remains as a compatibility/product adapter layer and should not be deleted yet.
 
@@ -260,3 +261,8 @@ This is sufficient to validate FateAtlas as a production consumer for the migrat
 FateAtlas is the strongest migration test for the cloud/provider abstraction because it already uses Apple local execution, OpenAI-compatible services, Anthropic, DeepSeek/custom endpoints, structured tasks, streaming, fallback, and user-configurable provider settings.
 
 A successful migration is therefore a meaningful 1.0 compatibility gate rather than a documentation exercise.
+
+
+### Phase 3 validation evidence
+
+FateAtlas main `cc357684` passes both the AppAIKit package test job and the full code-signing-disabled Release generic iOS application build after the dedicated OpenAI Responses migration. This keeps the protocol split explicit: OpenAI uses Responses, Anthropic uses Messages, and DeepSeek/custom remain generic compatible endpoints.
