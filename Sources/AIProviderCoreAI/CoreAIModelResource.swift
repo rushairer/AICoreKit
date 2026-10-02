@@ -1,5 +1,26 @@
 import Foundation
 
+public struct CoreAIModelProfile:
+    Hashable,
+    Sendable,
+    Codable
+{
+    public let identifier: String
+    public let displayName: String
+    public let sourceIdentifier: String?
+
+    public init(
+        identifier: String,
+        displayName: String,
+        sourceIdentifier: String? = nil
+    ) {
+        self.identifier = identifier
+        self.displayName = displayName
+        self.sourceIdentifier =
+            sourceIdentifier
+    }
+}
+
 public struct CoreAIModelResource: Hashable, Sendable, Codable {
     public let identifier: String
     public let path: String
