@@ -68,9 +68,11 @@ Current adoption evidence as of 2026-10-02:
 
 - FateAtlas main `03b65310` pins the validated AICoreKit baseline `794abcbd` through `Packages/AppAIKit`.
 - OpenAI-compatible chat/streaming (including DeepSeek/custom endpoints) and Anthropic chat/streaming execute through AICoreKit providers while AppAIKit preserves FateAtlas's existing public API.
-- Product-specific `fetchModels()`, connection testing, and current structured-output fallback remain in AppAIKit for incremental migration; the migrated chat/streaming path no longer maintains an independent URLSession/SSE transport implementation.
-- AppAIKit package tests pass.
-- The full FateAtlas app succeeds in a code-signing-disabled **Release** generic iOS build with the AICoreKit-backed path linked into the production app target.
+- Product-specific `fetchModels()` and connection testing remain in AppAIKit for incremental migration; the migrated chat/streaming path no longer maintains an independent URLSession/SSE transport implementation.
+- FateAtlas main `03b428cb` adds explicit product-owned JSON Schemas for zodiac, astrology, and BaZi enhancement payloads. When the configured remote protocol is Anthropic, those three production structured tasks now execute through AICoreKit's native `AIProviderAnthropic.generateStructured` path rather than prompt-only JSON extraction.
+- DeepSeek/custom/OpenAI-compatible structured generation intentionally keeps the validated product fallback because generic chat-completions endpoints do not share one reliable JSON Schema extension. Apple local structured generation also remains a product fallback.
+- AppAIKit package tests pass after the native structured migration.
+- The full FateAtlas app succeeds in a code-signing-disabled **Release** generic iOS build after the native Anthropic structured migration, with the AICoreKit-backed path linked into the production app target.
 - This satisfies the current production-consumer gate for the migrated cloud chat/streaming path. Remaining AppAIKit capabilities can migrate incrementally without invalidating that evidence.
 
 FateAtlas therefore counts as the **first completed AICoreKit production consumer**.

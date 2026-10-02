@@ -237,10 +237,19 @@ Phase 1 is now live in FateAtlas:
 - AppAIKit package tests pass.
 - A code-signing-disabled **Release** generic iOS build of the full FateAtlas app passes with the AICoreKit-backed providers linked into the production target.
 
+Phase 3 has now started for structured generation:
+
+- FateAtlas main `03b428cb` keeps `StructuredOutputSchema` product-facing and vendor-neutral inside AppAIKit, then converts it internally to AICoreKit `AIStructuredOutputSchema`.
+- Zodiac, astrology, and BaZi enhancement payloads now provide explicit schemas and use AICoreKit's native Anthropic structured-output adapter when the selected remote protocol is Anthropic.
+- The three payload DTOs are explicitly `nonisolated` because the FateAtlas app target uses MainActor default isolation while AICoreKit correctly requires structured outputs to be `Decodable & Sendable`.
+- AppAIKit tests and the full code-signing-disabled Release generic iOS build both pass after this change.
+- OpenAI-compatible/DeepSeek/custom structured generation intentionally keeps the validated prompt/JSON fallback; AICoreKit does not advertise a schema capability for a generic compatible endpoint.
+- Apple local structured generation also remains the existing product fallback until a reusable native contract is justified.
+
 The migration is intentionally incomplete:
 
 - `fetchModels()` and connection testing remain product-owned;
-- the current structured-generation fallback remains until native AICoreKit structured paths are migrated with behavior parity;
+- dedicated OpenAI Responses structured generation has not yet replaced FateAtlas's generic OpenAI-compatible path;
 - Apple local execution and the broader orchestration layer have not yet been collapsed into AICoreKit;
 - `Packages/AppAIKit` remains as a compatibility/product adapter layer and should not be deleted yet.
 
