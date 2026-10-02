@@ -366,4 +366,31 @@ public struct AIProviderConnectionTester:
                 await provider.availability()
         )
     }
+
+    public func probeTextGeneration(
+        profile: AIProviderProfile,
+        prompt: String = "Reply with OK.",
+        maxOutputTokens: Int = 8
+    ) async throws -> AIResponse {
+        let provider =
+            try factory.makeProvider(
+                from: profile
+            )
+
+        return try await provider.generate(
+            AIRequest(
+                messages: [
+                    .user(prompt)
+                ],
+                requiredCapabilities: [
+                    .textGeneration
+                ],
+                executionPreference:
+                    .remoteOnly,
+                maxOutputTokens:
+                    maxOutputTokens,
+                temperature: 0
+            )
+        )
+    }
 }
