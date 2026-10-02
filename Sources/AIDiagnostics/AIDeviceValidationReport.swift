@@ -92,6 +92,28 @@ public struct AIPersistentPreparationEvidence:
     }
 }
 
+public struct AIDiagnosticEnvironment:
+    Hashable,
+    Sendable,
+    Codable
+{
+    public let hardwareModelIdentifier: String?
+    public let architecture: String
+    public let operatingSystemVersion: String
+
+    public init(
+        hardwareModelIdentifier: String?,
+        architecture: String,
+        operatingSystemVersion: String
+    ) {
+        self.hardwareModelIdentifier =
+            hardwareModelIdentifier
+        self.architecture = architecture
+        self.operatingSystemVersion =
+            operatingSystemVersion
+    }
+}
+
 public struct AIDeviceValidationReport:
     Hashable,
     Sendable,
@@ -108,6 +130,10 @@ public struct AIDeviceValidationReport:
         [AIDiagnosticStep]
     public let persistentPreparation:
         AIPersistentPreparationEvidence?
+    public let environment:
+        AIDiagnosticEnvironment
+    public let metadata:
+        [String: String]
 
     public init(
         createdAt: Date,
@@ -116,7 +142,17 @@ public struct AIDeviceValidationReport:
         capabilitiesRawValue: UInt64,
         steps: [AIDiagnosticStep],
         persistentPreparation:
-            AIPersistentPreparationEvidence? = nil
+            AIPersistentPreparationEvidence? = nil,
+        environment:
+            AIDiagnosticEnvironment =
+                AIDiagnosticEnvironment(
+                    hardwareModelIdentifier: nil,
+                    architecture: "unknown",
+                    operatingSystemVersion:
+                        ProcessInfo.processInfo
+                        .operatingSystemVersionString
+                ),
+        metadata: [String: String] = [:]
     ) {
         self.createdAt = createdAt
         self.providerID = providerID
@@ -127,6 +163,8 @@ public struct AIDeviceValidationReport:
         self.steps = steps
         self.persistentPreparation =
             persistentPreparation
+        self.environment = environment
+        self.metadata = metadata
     }
 
     public func jsonData(

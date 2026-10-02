@@ -159,3 +159,80 @@ public enum AIProcessMetrics {
         #endif
     }
 }
+
+
+public enum AIDiagnosticEnvironmentProbe {
+    public static func current()
+        -> AIDiagnosticEnvironment
+    {
+        AIDiagnosticEnvironment(
+            hardwareModelIdentifier:
+                hardwareModelIdentifier(),
+            architecture:
+                architectureIdentifier(),
+            operatingSystemVersion:
+                ProcessInfo.processInfo
+                .operatingSystemVersionString
+        )
+    }
+
+    private static func hardwareModelIdentifier()
+        -> String?
+    {
+        #if canImport(Darwin)
+        var size: size_t = 0
+        guard
+            sysctlbyname(
+                "hw.machine",
+                nil,
+                &size,
+                nil,
+                0
+            ) == 0,
+            size > 0
+        else {
+            return nil
+        }
+
+        var value =
+            [CChar](
+                repeating: 0,
+                count: Int(size)
+            )
+
+        guard
+            sysctlbyname(
+                "hw.machine",
+                &value,
+                &size,
+                nil,
+                0
+            ) == 0
+        else {
+            return nil
+        }
+
+        return String(
+            cString: value
+        )
+        #else
+        return nil
+        #endif
+    }
+
+    private static func architectureIdentifier()
+        -> String
+    {
+        #if arch(arm64)
+        return "arm64"
+        #elseif arch(x86_64)
+        return "x86_64"
+        #elseif arch(i386)
+        return "i386"
+        #elseif arch(arm)
+        return "arm"
+        #else
+        return "unknown"
+        #endif
+    }
+}

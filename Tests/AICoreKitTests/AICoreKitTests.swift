@@ -4820,3 +4820,67 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testDeviceValidationReportCarriesEnvironmentAndCallerMetadata() async {
+        let provider =
+            StubProvider(
+                id: "fixture.environment",
+                capabilities: [
+                    .textGeneration
+                ],
+                text: "ok",
+                shouldFail: false
+            )
+
+        let report =
+            await AIDeviceValidationRunner()
+                .run(
+                    provider: provider,
+                    request:
+                        AIRequest(
+                            messages: [
+                                .user("hello")
+                            ]
+                        ),
+                    metadata: [
+                        "application.version":
+                            "3.2.0",
+                        "application.build":
+                            "42",
+                        "model.identifier":
+                            "Qwen3-0.6B"
+                    ]
+                )
+
+        XCTAssertFalse(
+            report.environment
+                .architecture
+                .isEmpty
+        )
+        XCTAssertFalse(
+            report.environment
+                .operatingSystemVersion
+                .isEmpty
+        )
+        XCTAssertEqual(
+            report.metadata[
+                "application.version"
+            ],
+            "3.2.0"
+        )
+        XCTAssertEqual(
+            report.metadata[
+                "application.build"
+            ],
+            "42"
+        )
+        XCTAssertEqual(
+            report.metadata[
+                "model.identifier"
+            ],
+            "Qwen3-0.6B"
+        )
+    }
+}

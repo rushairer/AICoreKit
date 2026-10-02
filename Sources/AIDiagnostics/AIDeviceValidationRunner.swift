@@ -27,7 +27,9 @@ public struct AIDeviceValidationRunner:
         provider: any AIProvider,
         request: AIRequest,
         cancellationProbe:
-            AICancellationProbe? = nil
+            AICancellationProbe? = nil,
+        metadata:
+            [String: String] = [:]
     ) async -> AIDeviceValidationReport {
         var steps:
             [AIDiagnosticStep] = []
@@ -47,7 +49,8 @@ public struct AIDeviceValidationRunner:
         else {
             return report(
                 provider: provider,
-                steps: steps
+                steps: steps,
+                metadata: metadata
             )
         }
 
@@ -230,7 +233,8 @@ public struct AIDeviceValidationRunner:
             provider: provider,
             steps: steps,
             persistentPreparation:
-                persistentEvidence
+                persistentEvidence,
+            metadata: metadata
         )
     }
 
@@ -238,7 +242,9 @@ public struct AIDeviceValidationRunner:
         provider: any AIProvider,
         steps: [AIDiagnosticStep],
         persistentPreparation:
-            AIPersistentPreparationEvidence? = nil
+            AIPersistentPreparationEvidence? = nil,
+        metadata:
+            [String: String] = [:]
     ) -> AIDeviceValidationReport {
         AIDeviceValidationReport(
             createdAt: Date(),
@@ -251,7 +257,11 @@ public struct AIDeviceValidationRunner:
                 .rawValue,
             steps: steps,
             persistentPreparation:
-                persistentPreparation
+                persistentPreparation,
+            environment:
+                AIDiagnosticEnvironmentProbe
+                .current(),
+            metadata: metadata
         )
     }
 
