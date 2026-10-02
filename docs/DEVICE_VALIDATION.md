@@ -30,7 +30,8 @@ Run diagnostics twice.
 Start from a cleared preparation cache and record:
 
 - availability;
-- persistent preparation + process load duration;
+- persistent preparation duration;
+- process/runtime load duration;
 - generation duration;
 - before/after physical footprint and resident memory;
 - thermal state;
@@ -64,3 +65,6 @@ For the 1.0 gate, retain:
 - notes for fallback, memory, cancellation, and thermal observations.
 
 The Roadmap item remains open until those real-device and signed-distribution artifacts exist.
+
+
+When the provider implements `AIPersistentResourceManaging`, the JSON report contains separate `preparePersistentResources` and `loadPreparedResources` steps. Do not collapse these measurements: the former represents first-use persistent specialization, while the latter represents ordinary process startup residency.

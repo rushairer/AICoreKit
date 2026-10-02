@@ -54,10 +54,54 @@ public struct AIDeviceValidationRunner:
         let resourceManager =
             provider
             as? any AIResourceManaging
+        let persistentManager =
+            provider
+            as? any AIPersistentResourceManaging
 
         var preparationSucceeded = true
 
-        if let resourceManager {
+        if let persistentManager {
+            let persistentPrepareStep =
+                await measureThrowing(
+                    operation:
+                        .preparePersistentResources
+                ) {
+                    try await persistentManager
+                        .preparePersistentResources()
+                }
+
+            steps.append(
+                persistentPrepareStep
+            )
+            preparationSucceeded =
+                persistentPrepareStep.status
+                == .succeeded
+
+            if preparationSucceeded {
+                let loadStep =
+                    await measureThrowing(
+                        operation:
+                            .loadPreparedResources
+                    ) {
+                        try await persistentManager
+                            .loadPreparedResources()
+                    }
+
+                steps.append(loadStep)
+                preparationSucceeded =
+                    loadStep.status
+                    == .succeeded
+            } else {
+                steps.append(
+                    skippedStep(
+                        operation:
+                            .loadPreparedResources,
+                        message:
+                            "Runtime load skipped because persistent preparation failed."
+                    )
+                )
+            }
+        } else if let resourceManager {
             let prepareStep =
                 await measureThrowing(
                     operation:

@@ -3,7 +3,7 @@ import Foundation
 
 public struct CoreAIProvider:
     AIProvider,
-    AIResourceManaging
+    AIPersistentResourceManaging
 {
     public let id: AIProviderID
     public let displayName: String

@@ -9,6 +9,8 @@ public enum AIDiagnosticOperation:
 {
     case availability
     case prepareResources
+    case preparePersistentResources
+    case loadPreparedResources
     case generate
     case cancellationProbe
     case releaseResources

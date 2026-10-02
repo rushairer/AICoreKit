@@ -4571,3 +4571,163 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+private actor PersistentDiagnosticFixtureState {
+    private(set) var prepareCount = 0
+    private(set) var loadCount = 0
+    private(set) var releaseCount = 0
+
+    func prepared() {
+        prepareCount += 1
+    }
+
+    func loaded() {
+        loadCount += 1
+    }
+
+    func released() {
+        releaseCount += 1
+    }
+
+    func counts()
+        -> (
+            prepare: Int,
+            load: Int,
+            release: Int
+        )
+    {
+        (
+            prepareCount,
+            loadCount,
+            releaseCount
+        )
+    }
+}
+
+private struct PersistentDiagnosticFixtureProvider:
+    AIProvider,
+    AIPersistentResourceManaging
+{
+    let state:
+        PersistentDiagnosticFixtureState
+
+    let id:
+        AIProviderID =
+            "fixture.persistent-diagnostics"
+    let displayName =
+        "Persistent Diagnostics Fixture"
+    let capabilities:
+        AICapabilities = [
+            .textGeneration,
+            .localExecution
+        ]
+
+    func availability()
+        async -> AIAvailability
+    {
+        .available
+    }
+
+    func isPersistentlyPrepared()
+        async -> Bool
+    {
+        false
+    }
+
+    func preparePersistentResources()
+        async throws
+    {
+        await state.prepared()
+    }
+
+    func loadPreparedResources()
+        async throws
+    {
+        await state.loaded()
+    }
+
+    func prepareResources()
+        async throws
+    {
+        try await
+            preparePersistentResources()
+        try await
+            loadPreparedResources()
+    }
+
+    func releaseResources()
+        async throws
+    {
+        await state.released()
+    }
+
+    func generate(
+        _ request: AIRequest
+    ) async throws -> AIResponse {
+        AIResponse(
+            text: "ok",
+            providerID: id
+        )
+    }
+}
+
+extension AICoreKitTests {
+    func testDeviceValidationRunnerSeparatesPersistentPreparationFromRuntimeLoad() async {
+        let state =
+            PersistentDiagnosticFixtureState()
+        let provider =
+            PersistentDiagnosticFixtureProvider(
+                state: state
+            )
+
+        let report =
+            await AIDeviceValidationRunner()
+                .run(
+                    provider: provider,
+                    request:
+                        AIRequest(
+                            messages: [
+                                .user("hello")
+                            ]
+                        )
+                )
+
+        XCTAssertEqual(
+            report.steps.map(\.operation),
+            [
+                .availability,
+                .preparePersistentResources,
+                .loadPreparedResources,
+                .generate,
+                .releaseResources
+            ]
+        )
+
+        XCTAssertEqual(
+            report.steps.map(\.status),
+            [
+                .succeeded,
+                .succeeded,
+                .succeeded,
+                .succeeded,
+                .succeeded
+            ]
+        )
+
+        let counts =
+            await state.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            1
+        )
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+        XCTAssertEqual(
+            counts.release,
+            1
+        )
+    }
+}

@@ -128,3 +128,10 @@ AICoreKit separates model lifecycle from product distribution policy.
 The package also ships reusable export/install scripts under `Scripts/`. These cover the mechanics proven in ColorCamera: pinned `coreai-models` export, model-directory validation, profile emission, and safe copying into a product-owned resource directory.
 
 AICoreKit intentionally does not decide whether an application bundles a model, downloads it on demand, or omits it. That is a product distribution policy. Once a directory is available, preparation, process loading, unload, preparation-cache clearing, provider execution, and device diagnostics are shared infrastructure.
+
+
+### Persistent resource lifecycle capability
+
+Providers whose first-use preparation is materially different from process-local loading should implement `AIPersistentResourceManaging`.
+
+The protocol separates `preparePersistentResources()` from `loadPreparedResources()` while retaining `AIResourceManaging` for providers with a single preparation phase. `CoreAIProvider` implements the persistent protocol. Device diagnostics detect it automatically and report first-use preparation and runtime loading as separate timing/memory/thermal steps.
