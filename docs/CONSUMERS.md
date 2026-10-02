@@ -10,7 +10,7 @@ The target is three production consumers with deliberately different workloads.
 | --- | --- | --- | --- |
 | ColorCamera | AICoreKit is a real app dependency; local-model lifecycle is routed through `CoreAIModelLifecycleController`, while product-specific generation remains in `ColorCameraCoreAI`; signed-device/archive validation remains open | Gradual migration of reusable provider/runtime infrastructure | iOS 26 host / iOS 27 local runtime, weak link, resource lifecycle, local fallback |
 | FateAtlas | Production cloud chat/streaming paths now delegate to AICoreKit; AppAIKit remains the product-facing compatibility layer; package tests and a Release generic iOS app build pass | Replace duplicated generic transport/provider runtime incrementally | cloud providers, user-selected endpoints, structured generation, streaming/fallback |
-| MetronomePro | AICoreKit pinned in PracticeFeature; on-demand AI Practice Coach path implemented on main, build/archive verification pending | New AI Practice Coach and natural-language actions | evidence-grounded generation, tool calling, local/cloud routing |
+| MetronomePro | User-visible Practice Coach now routes through a dedicated `PracticeCoachAI` package pinned to AICoreKit; module Release build and contract tests pass; full app Release validation remains blocked by private dependency CI credentials | New AI Practice Coach and natural-language actions | evidence-grounded generation, tool calling, local/cloud routing |
 
 ## What counts as a production consumer
 
@@ -86,13 +86,15 @@ Recommended validation scope:
 
 MetronomePro must preserve the architectural rule that generative AI interprets deterministic evidence rather than generating the evidence itself.
 
-Current adoption evidence as of 2026-10-01:
+Current adoption evidence as of 2026-10-02:
 
-- MetronomePro main `578baf32` pins AICoreKit revision `90ccfa36` in `PracticeFeature` and adds the evidence-grounded Practice Coach service plus product-level evidence-boundary tests.
-- MetronomePro main `4209f9e1` adds the user-visible, on-demand Practice Session Detail review path and complete Practice Coach localization coverage for the existing 15 PracticeFeature locales.
-- The generated review is ephemeral, cancellable, and cannot mutate Practice facts, Estimated Effective Time, goals, streaks, achievements, or leaderboard data.
-- GitHub Actions does not currently provide build/archive evidence for this integration because `METRONOMEPRO_CI_READ_TOKEN` is not configured; the workflow therefore skips targets that require the private `MetronomeEngine` dependency.
-- Until a real PracticeFeature build/test and production/Release archive succeed, MetronomePro does **not** count as a completed production consumer.
+- MetronomePro main `c512b396` extracts the generative layer into `Packages/PracticeCoachAI`, pinned to AICoreKit revision `590a67a4`. `PracticeFeature` keeps deterministic session/activity/timing evidence construction and depends on the small AI package only for interpretation.
+- The production Practice Session Detail path still creates `PracticeCoachEvidence` from deterministic facts and calls `PracticeCoachService`; there is no alternate generic provider abstraction for this migrated path.
+- `PracticeCoachAI` uses AICoreKit `AICore`, `AIOrchestration`, and `AIProviderApple` with `.localFirst` text generation. Its contract tests verify that the request contains only the supplied evidence JSON plus explicit unknowns and cannot turn unmeasured time, motivation, cheating, pitch accuracy, or musical expression into facts.
+- MetronomePro main `f8386772` has repeatable CI evidence that `PracticeCoachAI` builds in **Release** configuration and its tests pass without access to the private `MetronomeEngine` repository.
+- Full `PracticeFeature`, MetronomePro, and Metronome26 Release builds remain gated by `METRONOMEPRO_CI_READ_TOKEN`. When the token is absent the workflow explicitly warns and skips those steps; the green workflow is therefore module-level evidence, not full application Release evidence.
+- Both Metronome Xcode Cloud workflows were already failing before the current AICoreKit/package extraction, so those historical red statuses are tracked separately rather than treated as proof of an AICoreKit regression.
+- Until a real full-app production/Release build or archive succeeds, MetronomePro does **not** count as a completed production consumer.
 
 See `MIGRATION_METRONOMEPRO.md`.
 
