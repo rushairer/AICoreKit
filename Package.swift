@@ -84,8 +84,7 @@ let package = Package(
                 "AIProviderOpenAICompatible",
                 "AIProviderAnthropic",
                 "AIProviderGemini",
-                "AIProviderOpenAI",
-                "AIProviderConfiguration"
+                "AIProviderOpenAI"
             ]
         ),
         .target(
@@ -112,7 +111,8 @@ let package = Package(
                 "AIProviderOpenAICompatible",
                 "AIProviderAnthropic",
                 "AIProviderGemini",
-                "AIProviderOpenAI"
+                "AIProviderOpenAI",
+                "AIProviderConfiguration"
             ]
         )
     ]
