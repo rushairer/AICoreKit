@@ -122,9 +122,11 @@ A cancellation probe is explicit and reports whether cancellation was actually o
 
 ### Model resource deployment
 
-AICoreKit separates model lifecycle from product distribution policy.
+AICoreKit separates model identity/lifecycle from product distribution policy.
 
-`CoreAIDirectoryModelResourceProvider` is the reusable resource-discovery layer for Core AI model directories. It validates that the directory exists and, by default, that it contains at least one `.aimodel` descendant before exposing a `CoreAIModelResource`.
+`CoreAIModelProfile` is the reusable technical identity for a local model: a stable identifier, a user-presentable display name, and an optional upstream/source model identifier. It deliberately does not own bundle resource names, download/install policy, settings UI, or product copy.
+
+`CoreAIDirectoryModelResourceProvider` is the reusable resource-discovery layer for Core AI model directories. It accepts either a raw identifier or a `CoreAIModelProfile`, validates that the directory exists and, by default, that it contains at least one `.aimodel` descendant before exposing a `CoreAIModelResource`.
 
 The package also ships reusable export/install scripts under `Scripts/`. These cover the mechanics proven in ColorCamera: pinned `coreai-models` export, model-directory validation, profile emission, and safe copying into a product-owned resource directory.
 
