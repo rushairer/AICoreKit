@@ -216,17 +216,33 @@ The user's practice evidence sent to a remote provider should be minimized to wh
 
 ## Migration status update — 2026-10-02
 
-The first production feature is now implemented and partially validated:
+MetronomePro now pins the shared AICoreKit baseline `f6660787` through `Packages/PracticeCoachAI`.
 
-- `Packages/PracticeCoachAI` is the product-side AI boundary. MetronomePro main `98a48f0a` pins it to the validated AICoreKit baseline `794abcbd`; the package contains only the evidence DTO plus generative interpretation service.
-- `Packages/PracticeFeature` retains deterministic activity/timing evidence construction and the user-visible Practice Session Detail flow.
-- The service uses `DefaultAIOrchestrator` with `AppleFoundationModelsProvider`, requires only `.textGeneration`, and requests `.localFirst` execution.
-- AI prose remains ephemeral and cancellable. It cannot mutate factual Practice time, Estimated Effective Time, goals, streaks, achievements, or leaderboard submissions.
-- Contract tests verify that only deterministic evidence JSON and explicit unknowns are sent to the provider.
-- GitHub Actions successfully builds `PracticeCoachAI` in Release configuration and runs its tests against AICoreKit `794abcbd` without needing private `MetronomeEngine` access.
-- The full PracticeFeature and both iOS app Release builds are prepared in CI but remain skipped until `METRONOMEPRO_CI_READ_TOKEN` is configured. This keeps module validation distinct from application Release evidence.
+The production boundary remains deliberately small:
 
-The extraction is intentional: it prevents the AI layer from inheriting DSP/engine responsibilities and gives AICoreKit a small, independently testable real-product consumer while preserving the product's deterministic evidence boundary.
+- `PracticeFeature` computes deterministic practice/session/activity/timing evidence;
+- `PracticeCoachAI` translates only that evidence into a short generative review;
+- `SettingsFeature` exposes the product-facing provider configuration without implementing vendor HTTP semantics.
+
+Provider behavior is now:
+
+- Apple Foundation Models remains first in the registry and requests use `.localFirst`;
+- when the user explicitly configures cloud fallback, `PracticeCoachAI` constructs the remote provider through `AIProviderConfiguration`;
+- supported presets include OpenAI, Anthropic, Gemini, DeepSeek, and a custom OpenAI-compatible endpoint;
+- provider/model/base-URL preferences are product settings, while API credentials are stored in Keychain;
+- if no valid remote configuration/credential exists, the service remains Apple-local exactly as before;
+- if Apple local generation fails and cloud fallback is configured, `DefaultAIOrchestrator` may continue to the remote provider before a first successful response.
+
+Privacy/evidence boundary:
+
+- only deterministic `PracticeCoachEvidence` already visible to the product flow may be sent to the remote provider;
+- raw practice recordings are not sent to the language model;
+- missing analysis coverage remains an explicit unknown rather than being converted into inactivity, poor effort, cheating, pitch accuracy, expression, or other unmeasured claims;
+- AI prose remains advisory and cannot mutate practice duration, estimated effective time, goals, streaks, achievements, or leaderboard submissions.
+
+Contract tests cover the evidence-only request boundary plus remote-provider settings/profile construction. The shared Settings implementation is used by both MetronomePro and Metronome26, avoiding separate provider configuration forks.
+
+No new full-app Release/CI evidence is claimed by this update. Application-level archive validation remains a later gate when build capacity/private dependency access is available.
 
 ## Acceptance gates for first production feature
 
