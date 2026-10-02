@@ -59,8 +59,15 @@ public struct AIDeviceValidationRunner:
             as? any AIPersistentResourceManaging
 
         var preparationSucceeded = true
+        var persistentPreparedBefore:
+            Bool?
+        var persistentPreparedAfterPrepare:
+            Bool?
 
         if let persistentManager {
+            persistentPreparedBefore =
+                await persistentManager
+                .isPersistentlyPrepared()
             let persistentPrepareStep =
                 await measureThrowing(
                     operation:
@@ -76,6 +83,10 @@ public struct AIDeviceValidationRunner:
             preparationSucceeded =
                 persistentPrepareStep.status
                 == .succeeded
+
+            persistentPreparedAfterPrepare =
+                await persistentManager
+                .isPersistentlyPrepared()
 
             if preparationSucceeded {
                 let loadStep =
@@ -188,15 +199,46 @@ public struct AIDeviceValidationRunner:
             )
         }
 
+        let persistentEvidence:
+            AIPersistentPreparationEvidence?
+
+        if
+            let persistentManager,
+            let preparedBeforeRun =
+                persistentPreparedBefore,
+            let preparedAfterPrepare =
+                persistentPreparedAfterPrepare
+        {
+            let preparedAfterRelease =
+                await persistentManager
+                .isPersistentlyPrepared()
+
+            persistentEvidence =
+                AIPersistentPreparationEvidence(
+                    preparedBeforeRun:
+                        preparedBeforeRun,
+                    preparedAfterPrepare:
+                        preparedAfterPrepare,
+                    preparedAfterRelease:
+                        preparedAfterRelease
+                )
+        } else {
+            persistentEvidence = nil
+        }
+
         return report(
             provider: provider,
-            steps: steps
+            steps: steps,
+            persistentPreparation:
+                persistentEvidence
         )
     }
 
     private func report(
         provider: any AIProvider,
-        steps: [AIDiagnosticStep]
+        steps: [AIDiagnosticStep],
+        persistentPreparation:
+            AIPersistentPreparationEvidence? = nil
     ) -> AIDeviceValidationReport {
         AIDeviceValidationReport(
             createdAt: Date(),
@@ -207,7 +249,9 @@ public struct AIDeviceValidationRunner:
                 provider
                 .capabilities
                 .rawValue,
-            steps: steps
+            steps: steps,
+            persistentPreparation:
+                persistentPreparation
         )
     }
 

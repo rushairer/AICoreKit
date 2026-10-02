@@ -65,6 +65,33 @@ public struct AIDiagnosticStep:
     }
 }
 
+public struct AIPersistentPreparationEvidence:
+    Hashable,
+    Sendable,
+    Codable
+{
+    public let preparedBeforeRun: Bool
+    public let preparedAfterPrepare: Bool
+    public let preparedAfterRelease: Bool
+    public let coldPreparationPerformed: Bool
+
+    public init(
+        preparedBeforeRun: Bool,
+        preparedAfterPrepare: Bool,
+        preparedAfterRelease: Bool
+    ) {
+        self.preparedBeforeRun =
+            preparedBeforeRun
+        self.preparedAfterPrepare =
+            preparedAfterPrepare
+        self.preparedAfterRelease =
+            preparedAfterRelease
+        self.coldPreparationPerformed =
+            !preparedBeforeRun
+            && preparedAfterPrepare
+    }
+}
+
 public struct AIDeviceValidationReport:
     Hashable,
     Sendable,
@@ -79,13 +106,17 @@ public struct AIDeviceValidationReport:
         UInt64
     public let steps:
         [AIDiagnosticStep]
+    public let persistentPreparation:
+        AIPersistentPreparationEvidence?
 
     public init(
         createdAt: Date,
         providerID: AIProviderID,
         providerDisplayName: String,
         capabilitiesRawValue: UInt64,
-        steps: [AIDiagnosticStep]
+        steps: [AIDiagnosticStep],
+        persistentPreparation:
+            AIPersistentPreparationEvidence? = nil
     ) {
         self.createdAt = createdAt
         self.providerID = providerID
@@ -94,6 +125,8 @@ public struct AIDeviceValidationReport:
         self.capabilitiesRawValue =
             capabilitiesRawValue
         self.steps = steps
+        self.persistentPreparation =
+            persistentPreparation
     }
 
     public func jsonData(

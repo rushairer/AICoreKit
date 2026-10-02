@@ -24,7 +24,7 @@
 - [x] Add a lower-minimum Mach-O host fixture that proves the runtime is weak-linked.
 - [x] Add a Swift 5 language-mode consumer fixture for the lifecycle API used by lower-minimum host apps.
 - [x] Validate an unsigned Xcode 27 Release archive with an iOS 26 host weak-linking and embedding the iOS 27 runtime; verify bundle/Mach-O minimum OS values, LC_LOAD_WEAK_DYLIB, and the weak ABI reference in the archived app.
-- [ ] Validate signed-device lower-OS launch, signed/App Store distribution, iOS 27 inference, memory, cancellation, and thermal behavior. (`AIDiagnostics` now provides reusable lifecycle/generation/cancellation timing plus memory/thermal reports; real signed-device evidence is still required.)
+- [ ] Validate signed-device lower-OS launch, signed/App Store distribution, iOS 27 inference, memory, cancellation, and thermal behavior. (`AIDiagnostics` now provides reusable lifecycle/generation/cancellation timing, memory/thermal reports, and explicit cold-vs-warm persistent-preparation evidence; real signed-device evidence is still required.)
 
 ## 0.3 Cloud providers
 

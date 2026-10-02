@@ -4574,12 +4574,18 @@ extension AICoreKitTests {
 
 
 private actor PersistentDiagnosticFixtureState {
+    private var isPrepared: Bool
     private(set) var prepareCount = 0
     private(set) var loadCount = 0
     private(set) var releaseCount = 0
 
+    init(initiallyPrepared: Bool = false) {
+        isPrepared = initiallyPrepared
+    }
+
     func prepared() {
         prepareCount += 1
+        isPrepared = true
     }
 
     func loaded() {
@@ -4588,6 +4594,10 @@ private actor PersistentDiagnosticFixtureState {
 
     func released() {
         releaseCount += 1
+    }
+
+    func preparedState() -> Bool {
+        isPrepared
     }
 
     func counts()
@@ -4632,7 +4642,7 @@ private struct PersistentDiagnosticFixtureProvider:
     func isPersistentlyPrepared()
         async -> Bool
     {
-        false
+        await state.preparedState()
     }
 
     func preparePersistentResources()
@@ -4713,6 +4723,85 @@ extension AICoreKitTests {
                 .succeeded,
                 .succeeded
             ]
+        )
+
+        let evidence =
+            report.persistentPreparation
+        XCTAssertEqual(
+            evidence?.preparedBeforeRun,
+            false
+        )
+        XCTAssertEqual(
+            evidence?.preparedAfterPrepare,
+            true
+        )
+        XCTAssertEqual(
+            evidence?.preparedAfterRelease,
+            true
+        )
+        XCTAssertEqual(
+            evidence?.coldPreparationPerformed,
+            true
+        )
+
+        let counts =
+            await state.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            1
+        )
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+        XCTAssertEqual(
+            counts.release,
+            1
+        )
+    }
+}
+
+
+extension AICoreKitTests {
+    func testDeviceValidationRunnerMarksWarmPersistentPreparation() async {
+        let state =
+            PersistentDiagnosticFixtureState(
+                initiallyPrepared: true
+            )
+        let provider =
+            PersistentDiagnosticFixtureProvider(
+                state: state
+            )
+
+        let report =
+            await AIDeviceValidationRunner()
+                .run(
+                    provider: provider,
+                    request:
+                        AIRequest(
+                            messages: [
+                                .user("hello")
+                            ]
+                        )
+                )
+
+        let evidence =
+            report.persistentPreparation
+        XCTAssertEqual(
+            evidence?.preparedBeforeRun,
+            true
+        )
+        XCTAssertEqual(
+            evidence?.preparedAfterPrepare,
+            true
+        )
+        XCTAssertEqual(
+            evidence?.preparedAfterRelease,
+            true
+        )
+        XCTAssertEqual(
+            evidence?.coldPreparationPerformed,
+            false
         )
 
         let counts =
