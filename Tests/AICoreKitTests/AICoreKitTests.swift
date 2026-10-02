@@ -288,6 +288,7 @@ extension AICoreKitTests {
 
 
 import AIHTTP
+import AIDiagnostics
 import AIProviderOpenAICompatible
 
 private struct TestCredentialProvider: AICredentialProviding {
@@ -4234,6 +4235,248 @@ extension AICoreKitTests {
         XCTAssertEqual(
             refreshedState,
             .prepared
+        )
+    }
+}
+
+
+private actor DiagnosticFixtureState {
+    private(set) var prepareCount = 0
+    private(set) var releaseCount = 0
+
+    func prepared() {
+        prepareCount += 1
+    }
+
+    func released() {
+        releaseCount += 1
+    }
+
+    func counts() -> (Int, Int) {
+        (
+            prepareCount,
+            releaseCount
+        )
+    }
+}
+
+private struct DiagnosticFixtureProvider:
+    AIProvider,
+    AIResourceManaging
+{
+    let state:
+        DiagnosticFixtureState
+    let generationDelayNanoseconds:
+        UInt64
+
+    let id:
+        AIProviderID =
+            "fixture.diagnostics"
+    let displayName =
+        "Diagnostics Fixture"
+    let capabilities:
+        AICapabilities = [
+            .textGeneration,
+            .localExecution
+        ]
+
+    func availability()
+        async -> AIAvailability
+    {
+        .available
+    }
+
+    func prepareResources()
+        async throws
+    {
+        await state.prepared()
+    }
+
+    func releaseResources()
+        async throws
+    {
+        await state.released()
+    }
+
+    func generate(
+        _ request: AIRequest
+    ) async throws -> AIResponse {
+        if generationDelayNanoseconds > 0 {
+            try await Task.sleep(
+                nanoseconds:
+                    generationDelayNanoseconds
+            )
+        }
+
+        try Task.checkCancellation()
+
+        return AIResponse(
+            text: "ok",
+            providerID: id
+        )
+    }
+}
+
+extension AICoreKitTests {
+    func testDeviceValidationRunnerCapturesLifecycleAndCancellation() async throws {
+        let state =
+            DiagnosticFixtureState()
+        let provider =
+            DiagnosticFixtureProvider(
+                state: state,
+                generationDelayNanoseconds:
+                    100_000_000
+            )
+
+        let report =
+            await AIDeviceValidationRunner()
+                .run(
+                    provider: provider,
+                    request:
+                        AIRequest(
+                            messages: [
+                                .user("hello")
+                            ]
+                        ),
+                    cancellationProbe:
+                        AICancellationProbe(
+                            request:
+                                AIRequest(
+                                    messages: [
+                                        .user(
+                                            "cancel me"
+                                        )
+                                    ]
+                                ),
+                            delayMilliseconds: 5
+                        )
+                )
+
+        XCTAssertEqual(
+            report.providerID,
+            provider.id
+        )
+
+        XCTAssertEqual(
+            report.steps.map(\.operation),
+            [
+                .availability,
+                .prepareResources,
+                .generate,
+                .cancellationProbe,
+                .releaseResources
+            ]
+        )
+
+        XCTAssertEqual(
+            report.steps.map(\.status),
+            [
+                .succeeded,
+                .succeeded,
+                .succeeded,
+                .cancelled,
+                .succeeded
+            ]
+        )
+
+        let counts =
+            await state.counts()
+        XCTAssertEqual(
+            counts.0,
+            1
+        )
+        XCTAssertEqual(
+            counts.1,
+            1
+        )
+
+        let json =
+            try report.jsonString()
+        XCTAssertTrue(
+            json.contains(
+                "fixture.diagnostics"
+            )
+        )
+    }
+
+    func testDeviceValidationRunnerStopsAfterUnavailableProvider() async {
+        let provider =
+            StubProvider(
+                id:
+                    "fixture.unavailable",
+                capabilities: [
+                    .textGeneration
+                ],
+                text: "",
+                shouldFail: false
+            )
+
+        let unavailable =
+            UnavailableDiagnosticProvider(
+                base: provider
+            )
+
+        let report =
+            await AIDeviceValidationRunner()
+                .run(
+                    provider: unavailable,
+                    request:
+                        AIRequest(
+                            messages: [
+                                .user("hello")
+                            ]
+                        )
+                )
+
+        XCTAssertEqual(
+            report.steps.count,
+            1
+        )
+        XCTAssertEqual(
+            report.steps.first?
+                .operation,
+            .availability
+        )
+        XCTAssertEqual(
+            report.steps.first?
+                .status,
+            .unavailable
+        )
+    }
+}
+
+private struct UnavailableDiagnosticProvider:
+    AIProvider
+{
+    let base: StubProvider
+
+    var id: AIProviderID {
+        base.id
+    }
+
+    var displayName: String {
+        base.displayName
+    }
+
+    var capabilities:
+        AICapabilities
+    {
+        base.capabilities
+    }
+
+    func availability()
+        async -> AIAvailability
+    {
+        .unavailable(
+            .unsupportedPlatform
+        )
+    }
+
+    func generate(
+        _ request: AIRequest
+    ) async throws -> AIResponse {
+        try await base.generate(
+            request
         )
     }
 }

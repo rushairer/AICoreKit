@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "AIHTTP", targets: ["AIHTTP"]),
         .library(name: "AIOrchestration", targets: ["AIOrchestration"]),
         .library(name: "AITools", targets: ["AITools"]),
+        .library(name: "AIDiagnostics", targets: ["AIDiagnostics"]),
         .library(name: "AIProviderApple", targets: ["AIProviderApple"]),
         .library(name: "AIProviderCoreAI", targets: ["AIProviderCoreAI"]),
         .library(name: "AIProviderCoreAIWeakLink", targets: ["AIProviderCoreAIWeakLink"]),
@@ -32,6 +33,7 @@ let package = Package(
             ]
         ),
         .target(name: "AITools", dependencies: ["AICore"]),
+        .target(name: "AIDiagnostics", dependencies: ["AICore"]),
         .target(name: "AIProviderApple", dependencies: ["AICore"]),
         .target(
             name: "AICoreWeakBridgeShim",
@@ -79,6 +81,7 @@ let package = Package(
                 "AICore",
                 "AIOrchestration",
                 "AITools",
+                "AIDiagnostics",
                 "AIProviderApple",
                 "AIProviderCoreAI"
             ]

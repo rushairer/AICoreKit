@@ -106,3 +106,14 @@ Lifecycle reset and cache-clear operations invalidate the current readiness gene
 `CoreAIModelLifecycleController.stateChanges(includeCurrentState:)` exposes a multi-subscriber `AsyncStream` of product-neutral lifecycle states. It emits only real state transitions and can optionally begin with the current state.
 
 Consumer UI should map this stream into product wording and actions instead of maintaining a second prepare/load/ready state machine. Request-execution stages such as model warming, text generation, and product-side validation remain separate from model lifecycle state.
+
+
+## Device diagnostics
+
+`AIDiagnostics` is a provider-neutral validation layer for production and signed-device qualification. It records availability, resource preparation, generation, cancellation, and release as ordered diagnostic steps.
+
+Each step captures elapsed time plus before/after process snapshots with physical footprint, resident memory, thermal state, low-power mode, and OS version where available. The runner accepts any `AIProvider`; providers that also implement `AIResourceManaging` automatically participate in prepare/release measurement.
+
+The diagnostics module deliberately does not decide pass/fail thresholds for memory or thermals. Product teams and device qualification plans own those thresholds because acceptable budgets vary by model size, foreground workload, camera/audio coexistence, and supported device tier.
+
+A cancellation probe is explicit and reports whether cancellation was actually observed. If generation finishes before cancellation can take effect, the diagnostic step is reported as a failure rather than falsely claiming cancellation support.
