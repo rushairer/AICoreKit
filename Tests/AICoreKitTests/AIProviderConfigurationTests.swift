@@ -308,30 +308,53 @@ final class AIProviderConfigurationTests:
     func testLegacyProfileJSONDecodesWithExecutionDefaults()
         throws
     {
-        let json =
-            """
-            {
-              "id": "legacy",
-              "kind": "openAI",
-              "providerID": {
-                "rawValue": "openai"
-              },
-              "displayName": "OpenAI",
-              "model": "gpt-5",
-              "baseURL": "https://api.openai.com/v1",
-              "credentialKind": {
-                "bearerToken": {}
-              }
-            }
-            """
+        let current =
+            try AIProviderPreset
+            .openAI
+            .profile(
+                id: "legacy",
+                model: "gpt-5",
+                timeout: 17,
+                defaultMaxOutputTokens:
+                    123,
+                defaultTemperature:
+                    0.4
+            )
 
+        let encoded =
+            try JSONEncoder().encode(
+                current
+            )
+        var object =
+            try XCTUnwrap(
+                JSONSerialization
+                    .jsonObject(
+                        with: encoded
+                    )
+                    as? [String: Any]
+            )
+
+        object.removeValue(
+            forKey: "timeout"
+        )
+        object.removeValue(
+            forKey:
+                "defaultMaxOutputTokens"
+        )
+        object.removeValue(
+            forKey:
+                "defaultTemperature"
+        )
+
+        let legacyData =
+            try JSONSerialization.data(
+                withJSONObject:
+                    object
+            )
         let profile =
             try JSONDecoder().decode(
                 AIProviderProfile.self,
-                from:
-                    Data(
-                        json.utf8
-                    )
+                from: legacyData
             )
 
         XCTAssertEqual(
@@ -343,6 +366,14 @@ final class AIProviderConfigurationTests:
         )
         XCTAssertNil(
             profile.defaultTemperature
+        )
+        XCTAssertEqual(
+            profile.providerID,
+            .openAI
+        )
+        XCTAssertEqual(
+            profile.model,
+            "gpt-5"
         )
     }
 
