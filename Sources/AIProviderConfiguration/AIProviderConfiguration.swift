@@ -302,13 +302,31 @@ public extension AIProviderProfile {
 public enum AIProviderProfileValidationError:
     Error,
     Sendable,
-    Equatable
+    Equatable,
+    LocalizedError
 {
     case emptyIdentifier
     case emptyDisplayName
     case emptyModel
     case unsupportedURLScheme
     case missingHost
+
+    public var errorDescription:
+        String?
+    {
+        switch self {
+        case .emptyIdentifier:
+            return "Provider identifier is required."
+        case .emptyDisplayName:
+            return "Provider display name is required."
+        case .emptyModel:
+            return "Model name is required."
+        case .unsupportedURLScheme:
+            return "Provider URL must use HTTP or HTTPS."
+        case .missingHost:
+            return "Provider URL must include a valid host."
+        }
+    }
 }
 
 public enum AIProviderProfileValidator {
