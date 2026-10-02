@@ -10,7 +10,9 @@ public enum AIProviderProfileKind:
     String,
     CaseIterable,
     Codable,
-    Sendable
+    Sendable,
+    Equatable,
+    Hashable
 {
     case openAI
     case anthropic
