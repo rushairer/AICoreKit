@@ -4480,3 +4480,94 @@ private struct UnavailableDiagnosticProvider:
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testDirectoryModelResourceProviderRequiresModelAsset() async throws {
+        let root =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        try FileManager.default
+            .createDirectory(
+                at: root,
+                withIntermediateDirectories:
+                    true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(at: root)
+        }
+
+        let provider =
+            CoreAIDirectoryModelResourceProvider(
+                identifier: "fixture",
+                directoryURL: root
+            )
+
+        let missing =
+            try await provider
+                .modelResource()
+        XCTAssertNil(missing)
+
+        let asset =
+            root
+            .appendingPathComponent(
+                "fixture.aimodel"
+            )
+        try Data()
+            .write(to: asset)
+
+        let resource =
+            try await provider
+                .modelResource()
+
+        XCTAssertEqual(
+            resource?.identifier,
+            "fixture"
+        )
+        XCTAssertEqual(
+            resource?.path,
+            root.path
+        )
+    }
+
+    func testDirectoryModelResourceProviderCanSkipExtensionValidation() async throws {
+        let root =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        try FileManager.default
+            .createDirectory(
+                at: root,
+                withIntermediateDirectories:
+                    true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(at: root)
+        }
+
+        let provider =
+            CoreAIDirectoryModelResourceProvider(
+                identifier: "fixture",
+                directoryURL: root,
+                requiredFileExtension: nil
+            )
+
+        let resource =
+            try await provider
+                .modelResource()
+
+        XCTAssertEqual(
+            resource?.path,
+            root.path
+        )
+    }
+}

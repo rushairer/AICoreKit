@@ -14,6 +14,7 @@
 - [x] Define a host-safe Core AI provider and injectable bridge contract.
 - [x] Generalize the product-neutral C ABI contract from the ColorCamera compatibility spike.
 - [x] Define local model resource identity and readiness.
+- [x] Generalize Core AI model-directory discovery plus export/install mechanics so product repositories do not need to reimplement deployment plumbing.
 - [x] Add a live weak-symbol host bridge using the stable C ABI.
 - [x] Add an isolated iOS/macOS 27 Core AI runtime Swift package.
 - [x] Add explicit model prepare / unload lifecycle hooks.

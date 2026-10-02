@@ -117,3 +117,14 @@ Each step captures elapsed time plus before/after process snapshots with physica
 The diagnostics module deliberately does not decide pass/fail thresholds for memory or thermals. Product teams and device qualification plans own those thresholds because acceptable budgets vary by model size, foreground workload, camera/audio coexistence, and supported device tier.
 
 A cancellation probe is explicit and reports whether cancellation was actually observed. If generation finishes before cancellation can take effect, the diagnostic step is reported as a failure rather than falsely claiming cancellation support.
+
+
+### Model resource deployment
+
+AICoreKit separates model lifecycle from product distribution policy.
+
+`CoreAIDirectoryModelResourceProvider` is the reusable resource-discovery layer for Core AI model directories. It validates that the directory exists and, by default, that it contains at least one `.aimodel` descendant before exposing a `CoreAIModelResource`.
+
+The package also ships reusable export/install scripts under `Scripts/`. These cover the mechanics proven in ColorCamera: pinned `coreai-models` export, model-directory validation, profile emission, and safe copying into a product-owned resource directory.
+
+AICoreKit intentionally does not decide whether an application bundles a model, downloads it on demand, or omits it. That is a product distribution policy. Once a directory is available, preparation, process loading, unload, preparation-cache clearing, provider execution, and device diagnostics are shared infrastructure.
