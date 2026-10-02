@@ -218,11 +218,13 @@ A production gateway should additionally use its own request ID or vendor-suppor
 
 It provides:
 
-- `AIProviderProfile` for validated provider/model/base-URL metadata;
+- `AIProviderProfile` for validated provider/model/base-URL metadata plus technical execution defaults such as timeout, default max output tokens, and default temperature;
 - `AIProviderPreset` for OpenAI, Anthropic, Gemini, DeepSeek, and custom OpenAI-compatible endpoints;
-- `AIConfiguredProviderFactory` for constructing the matching AICoreKit provider;
+- protocol-aware validation for provider IDs, URL shape, credential kind, timeout, token limits, and finite temperature values;
+- backward-compatible `Codable` evolution: profiles persisted before execution-default fields were added decode with the documented defaults instead of becoming unreadable;
+- `AIConfiguredProviderFactory` for constructing the matching AICoreKit provider while preserving those execution defaults;
 - `AIProviderConnectionTester` for availability checks and explicit low-token generation probes.
 
 Applications remain responsible for user-facing provider names/policy, whether cloud execution is enabled, model-selection UX, and storage of credentials. API keys should normally live in Keychain or behind an application gateway, not in `UserDefaults`.
 
-Consumer code should prefer these shared profiles/factories over rebuilding vendor endpoint/header semantics independently.
+Consumer code should prefer these shared profiles/factories over rebuilding vendor endpoint/header semantics independently. FateAtlas, ColorCamera, and MetronomePro now exercise this boundary from three different product settings models: the shared layer owns protocol construction, while each product keeps its own UI and product policy.
