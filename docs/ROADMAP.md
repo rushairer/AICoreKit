@@ -17,6 +17,7 @@
 - [x] Add a live weak-symbol host bridge using the stable C ABI.
 - [x] Add an isolated iOS/macOS 27 Core AI runtime Swift package.
 - [x] Add explicit model prepare / unload lifecycle hooks.
+- [x] Separate persistent Core AI preparation from current-process loading, including cache inspection, cache clearing, launch-safe bootstrap, and shared in-flight lifecycle tasks.
 - [x] Add a Qwen3-0.6B export and integration fixture without shipping model assets.
 - [x] Build and validate the iOS 27 runtime framework artifact on an Xcode 27 CI runner.
 - [x] Add a lower-minimum Mach-O host fixture that proves the runtime is weak-linked.

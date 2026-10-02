@@ -8,12 +8,37 @@ The host must not import `CoreAILanguageModels` or the higher-minimum Swift runt
 
 ```c
 int32_t AICKCoreAIIsAvailable(void);
+int32_t AICKCoreAIIsPrepared(const char *modelPath);
 
 void AICKCoreAIGenerate(
     const char *requestJSON,
     const char *modelPath,
     void *context,
     AICKCoreAIGenerateCompletion completion
+);
+
+void AICKCoreAIPrepare(
+    const char *modelPath,
+    void *context,
+    AICKCoreAIStatusCompletion completion
+);
+
+void AICKCoreAILoad(
+    const char *modelPath,
+    void *context,
+    AICKCoreAIStatusCompletion completion
+);
+
+void AICKCoreAIUnload(
+    const char *modelPath,
+    void *context,
+    AICKCoreAIStatusCompletion completion
+);
+
+void AICKCoreAIClearPreparationCache(
+    const char *modelPath,
+    void *context,
+    AICKCoreAIStatusCompletion completion
 );
 ```
 
@@ -66,3 +91,15 @@ The ABI intentionally knows nothing about palettes, practice sessions, astrology
 | 5 | cancelled |
 | 6 | runtime unavailable |
 | -1 | unknown |
+
+
+## Lifecycle semantics
+
+The ABI deliberately distinguishes two kinds of local-model state:
+
+1. **Persistent preparation** — Core AI specialization survives process termination and is queried with `AICKCoreAIIsPrepared`. `AICKCoreAIPrepare` may be expensive on first use.
+2. **Current-process residency** — `AICKCoreAILoad` makes an already prepared model resident for the current process; `AICKCoreAIUnload` releases that resident engine without deleting the persistent preparation cache.
+
+`AICKCoreAIClearPreparationCache` first unloads current-process state and then removes Core AI's persistent specialization cache while leaving installed model assets intact.
+
+A lower-minimum host must never call `AICKCoreAIPrepare` automatically at application launch merely because model assets exist. It may call `AICKCoreAILoad` automatically only after `AICKCoreAIIsPrepared` confirms a persistent cache hit.

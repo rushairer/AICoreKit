@@ -45,9 +45,12 @@ The produced framework must satisfy all of these conditions:
 - Mach-O install name is `@rpath/AICoreKitCoreAIRuntime.framework/AICoreKitCoreAIRuntime`;
 - the following C ABI symbols are exported:
   - `AICKCoreAIIsAvailable`
+  - `AICKCoreAIIsPrepared`
   - `AICKCoreAIGenerate`
   - `AICKCoreAIPrepare`
+  - `AICKCoreAILoad`
   - `AICKCoreAIUnload`
+  - `AICKCoreAIClearPreparationCache`
 
 `Scripts/verify-coreai-runtime-framework.sh` enforces these invariants in CI.
 
@@ -88,7 +91,7 @@ Before declaring the compatibility boundary production-ready, a real host applic
 
 - the runtime framework is embedded and code signed;
 - the final app launches successfully on the lower supported OS when the runtime cannot load;
-- the four C ABI symbols resolve and inference succeeds on iOS 27+;
+- the lifecycle and generation C ABI symbols resolve and inference succeeds on iOS 27+;
 - Release/archive behavior matches Debug compatibility behavior.
 
 ColorCamera previously demonstrated this topology. AICoreKit's Compatibility Lab extracts those checks into product-neutral validation.

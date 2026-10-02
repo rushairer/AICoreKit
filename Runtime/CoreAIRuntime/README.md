@@ -41,3 +41,16 @@ The runtime currently pins Apple's `coreai-models` repository to revision
 `3efa838ebf1a1e816ef4c17eb5022fe22cda2cb9`.
 
 Update that revision deliberately and let the dedicated runtime CI job validate the integration before merging.
+
+
+## Preparation and loading lifecycle
+
+The runtime distinguishes persistent Core AI specialization from current-process model residency.
+
+- `AICKCoreAIIsPrepared` inspects `PreparedModel.isCached` for every model asset without triggering specialization.
+- `AICKCoreAIPrepare` specializes uncached assets and does not make the language model resident.
+- `AICKCoreAILoad` requires persistent preparation and creates the eager in-process `CoreAILanguageModel`.
+- `AICKCoreAIUnload` releases the resident engine but keeps persistent preparation.
+- `AICKCoreAIClearPreparationCache` unloads the engine and removes Core AI specialization with `PreparedModel.clearCache`.
+
+Preparation and loading each deduplicate concurrent callers through one shared in-flight task per model path.

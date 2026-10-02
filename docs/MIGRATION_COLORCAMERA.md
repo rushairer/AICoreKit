@@ -172,3 +172,17 @@ AICoreKit must not depend on ColorCamera.
 ColorCamera is a strong candidate to become the first AICoreKit production consumer because it already exercises the hardest compatibility boundary: a lower-minimum iOS host with an optional higher-minimum local AI runtime.
 
 The migration should remain incremental until the remaining signed-device and distribution gates are complete.
+
+
+## Lifecycle behavior extracted from ColorCamera
+
+ColorCamera's latest local-model work established several lifecycle rules that are now implemented directly by AICoreKit:
+
+- persistent Core AI specialization is distinct from current-process residency;
+- a fresh process must inspect persistent preparation rather than reporting an already specialized model as never initialized;
+- application launch may load an already prepared model but must not trigger the expensive first preparation;
+- unload and preparation-cache clearing are different operations;
+- clearing preparation keeps model assets installed and intentionally makes the next real use pay first-use preparation again;
+- concurrent first use, settings initialization, and generation requests share one readiness operation instead of launching duplicate model loads.
+
+When ColorCamera migrates its Core AI provider, its product-specific initialization UI may remain, but the `CoreAIModelPrewarmer` and low-level preparation/load/cache bookkeeping should be replaced by `CoreAIModelLifecycleController` / `CoreAIProvider`.

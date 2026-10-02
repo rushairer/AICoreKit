@@ -38,9 +38,12 @@ grep -A8 'LC_BUILD_VERSION' "$WORK_DIR/load-commands.txt" | grep -Eq 'minos 27(\
 
 for symbol in \
   _AICKCoreAIIsAvailable \
+  _AICKCoreAIIsPrepared \
   _AICKCoreAIGenerate \
   _AICKCoreAIPrepare \
-  _AICKCoreAIUnload
+  _AICKCoreAILoad \
+  _AICKCoreAIUnload \
+  _AICKCoreAIClearPreparationCache
 do
   grep -Eq "[[:space:]]T[[:space:]]+$symbol$" "$WORK_DIR/exported-symbols.txt" || {
     echo "Missing exported C ABI symbol: $symbol" >&2

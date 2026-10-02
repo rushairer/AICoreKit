@@ -17,6 +17,10 @@ typedef void (*AICKCoreAIStatusCompletion)(
 FOUNDATION_EXPORT int32_t AICKCoreAIIsAvailable(void)
     API_AVAILABLE(ios(27.0));
 
+FOUNDATION_EXPORT int32_t AICKCoreAIIsPrepared(
+    const char *modelPath
+) API_AVAILABLE(ios(27.0));
+
 FOUNDATION_EXPORT void AICKCoreAIGenerate(
     const char *requestJSON,
     const char *modelPath,
@@ -30,7 +34,19 @@ FOUNDATION_EXPORT void AICKCoreAIPrepare(
     AICKCoreAIStatusCompletion completion
 ) API_AVAILABLE(ios(27.0));
 
+FOUNDATION_EXPORT void AICKCoreAILoad(
+    const char *modelPath,
+    void * _Nullable context,
+    AICKCoreAIStatusCompletion completion
+) API_AVAILABLE(ios(27.0));
+
 FOUNDATION_EXPORT void AICKCoreAIUnload(
+    const char *modelPath,
+    void * _Nullable context,
+    AICKCoreAIStatusCompletion completion
+) API_AVAILABLE(ios(27.0));
+
+FOUNDATION_EXPORT void AICKCoreAIClearPreparationCache(
     const char *modelPath,
     void * _Nullable context,
     AICKCoreAIStatusCompletion completion

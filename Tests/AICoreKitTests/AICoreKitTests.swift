@@ -210,8 +210,25 @@ extension AICoreKitTests {
 
 
 private struct LifecycleStubCoreAIBridge: CoreAIModelLifecycleBridge {
+    let initiallyPrepared: Bool
     let prepareStatus: CoreAIBridgeStatus
+    let loadStatus: CoreAIBridgeStatus
     let unloadStatus: CoreAIBridgeStatus
+    let clearStatus: CoreAIBridgeStatus
+
+    init(
+        initiallyPrepared: Bool = false,
+        prepareStatus: CoreAIBridgeStatus = .success,
+        loadStatus: CoreAIBridgeStatus = .success,
+        unloadStatus: CoreAIBridgeStatus = .success,
+        clearStatus: CoreAIBridgeStatus = .success
+    ) {
+        self.initiallyPrepared = initiallyPrepared
+        self.prepareStatus = prepareStatus
+        self.loadStatus = loadStatus
+        self.unloadStatus = unloadStatus
+        self.clearStatus = clearStatus
+    }
 
     func availability() async -> AIAvailability {
         .available
@@ -224,12 +241,26 @@ private struct LifecycleStubCoreAIBridge: CoreAIModelLifecycleBridge {
         CoreAIBridgeInvocation(status: .unavailable)
     }
 
+    func isPrepared(modelPath: String) async -> Bool {
+        initiallyPrepared
+    }
+
     func prepare(modelPath: String) async -> CoreAIBridgeStatus {
         prepareStatus
     }
 
+    func load(modelPath: String) async -> CoreAIBridgeStatus {
+        loadStatus
+    }
+
     func unload(modelPath: String) async -> CoreAIBridgeStatus {
         unloadStatus
+    }
+
+    func clearPreparationCache(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        clearStatus
     }
 }
 
@@ -241,10 +272,7 @@ extension AICoreKitTests {
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
 
         let provider = CoreAIProvider(
-            bridge: LifecycleStubCoreAIBridge(
-                prepareStatus: .success,
-                unloadStatus: .success
-            ),
+            bridge: LifecycleStubCoreAIBridge(),
             resourceProvider: StaticCoreAIModelResourceProvider(
                 resource: CoreAIModelResource(
                     identifier: "fixture",
@@ -3415,6 +3443,340 @@ extension AICoreKitTests {
         XCTAssertEqual(
             delays,
             [0]
+        )
+    }
+}
+
+
+private actor RecordingCoreAILifecycleBridge:
+    CoreAIModelLifecycleBridge
+{
+    private var prepared: Bool
+    private(set) var prepareCount = 0
+    private(set) var loadCount = 0
+    private(set) var unloadCount = 0
+    private(set) var clearCount = 0
+
+    init(prepared: Bool) {
+        self.prepared = prepared
+    }
+
+    func availability() async -> AIAvailability {
+        .available
+    }
+
+    func generate(
+        requestJSON: String,
+        modelPath: String
+    ) async -> CoreAIBridgeInvocation {
+        CoreAIBridgeInvocation(
+            status: .unavailable
+        )
+    }
+
+    func isPrepared(
+        modelPath: String
+    ) async -> Bool {
+        prepared
+    }
+
+    func prepare(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        prepareCount += 1
+        try? await Task.sleep(
+            nanoseconds: 20_000_000
+        )
+        prepared = true
+        return .success
+    }
+
+    func load(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        loadCount += 1
+        try? await Task.sleep(
+            nanoseconds: 20_000_000
+        )
+        return .success
+    }
+
+    func unload(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        unloadCount += 1
+        return .success
+    }
+
+    func clearPreparationCache(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        clearCount += 1
+        prepared = false
+        return .success
+    }
+
+    func counts()
+        -> (
+            prepare: Int,
+            load: Int,
+            unload: Int,
+            clear: Int
+        )
+    {
+        (
+            prepareCount,
+            loadCount,
+            unloadCount,
+            clearCount
+        )
+    }
+}
+
+extension AICoreKitTests {
+    func testCoreAILifecycleDistinguishesPreparedFromReady() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: true
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        let initial =
+            await controller.currentState()
+        XCTAssertEqual(
+            initial,
+            .prepared
+        )
+
+        let bootstrapped =
+            try await controller
+                .bootstrapIfPrepared()
+        XCTAssertTrue(bootstrapped)
+        XCTAssertEqual(
+            await controller.currentState(),
+            .ready
+        )
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            0
+        )
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+    }
+
+    func testCoreAIBootstrapNeverTriggersFirstPreparation() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: false
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        let bootstrapped =
+            try await controller
+                .bootstrapIfPrepared()
+
+        XCTAssertFalse(bootstrapped)
+        XCTAssertEqual(
+            await controller.currentState(),
+            .notPrepared
+        )
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            0
+        )
+        XCTAssertEqual(
+            counts.load,
+            0
+        )
+    }
+
+    func testCoreAILifecycleCoalescesConcurrentFirstUse() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: false
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        async let first: Void =
+            controller.ensureReady()
+        async let second: Void =
+            controller.ensureReady()
+
+        _ = try await (
+            first,
+            second
+        )
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            1
+        )
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+        XCTAssertEqual(
+            await controller.currentState(),
+            .ready
+        )
+    }
+
+    func testCoreAIClearPreparationCacheKeepsLifecycleDistinct() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: true
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        _ = try await controller
+            .bootstrapIfPrepared()
+        try await controller
+            .clearPreparationCache()
+
+        XCTAssertEqual(
+            await controller.currentState(),
+            .notPrepared
+        )
+        XCTAssertFalse(
+            await controller
+                .isPersistentlyPrepared()
+        )
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+        XCTAssertEqual(
+            counts.clear,
+            1
         )
     }
 }

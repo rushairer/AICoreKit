@@ -67,3 +67,32 @@ The default `ReadOnlyAIToolExecutionPolicy` continues to auto-run only read-only
 AICoreKit does not render alerts or decide consent UX. Applications inject confirmation UI through `AIToolConfirmationProviding`, which receives both the normalized `AIToolCall` (including arguments) and its `AIToolDefinition`. Missing or denied confirmation is represented by explicit `AIError.toolConfirmationRequired` and `AIError.toolConfirmationDenied` values.
 
 This keeps model intent, authorization policy, user consent, and business execution as separate boundaries.
+
+
+## Local model lifecycle
+
+AICoreKit treats persistent model preparation and current-process loading as different states.
+
+`CoreAIModelLifecycleController` exposes the product-neutral lifecycle:
+
+```text
+notPrepared
+    |
+    | explicit first use / prepareResources()
+    v
+preparing
+    v
+prepared
+    |
+    | loadPreparedResources()
+    v
+loading
+    v
+ready
+```
+
+`bootstrapIfPrepared()` is intentionally asymmetric: it checks the persistent Core AI preparation cache and performs only the faster runtime load when that cache already exists. It returns `false` without preparing anything when the cache is absent. This makes it safe for an application-launch bootstrap path.
+
+`releaseResources()` unloads only current-process residency. `clearPreparationCache()` unloads first and then removes persistent specialization while leaving installed model files untouched.
+
+Provider instances share one lifecycle controller internally, and that actor coalesces concurrent prepare/load requests into a single in-flight readiness task. The iOS 27 runtime independently coalesces Core AI preparation and model loading as a second safety boundary.
