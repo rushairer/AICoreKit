@@ -150,6 +150,152 @@ final class AIProviderConfigurationTests:
         }
     }
 
+    func testPresetPreservesExecutionDefaults()
+        throws
+    {
+        let profile =
+            try AIProviderPreset
+            .openAI
+            .profile(
+                id: "consumer.openai",
+                model: "gpt-5",
+                timeout: 12,
+                defaultMaxOutputTokens:
+                    321,
+                defaultTemperature:
+                    0.4
+            )
+
+        XCTAssertEqual(
+            profile.timeout,
+            12
+        )
+        XCTAssertEqual(
+            profile.defaultMaxOutputTokens,
+            321
+        )
+        XCTAssertEqual(
+            profile.defaultTemperature,
+            0.4
+        )
+    }
+
+    func testLegacyProfileJSONDecodesWithExecutionDefaults()
+        throws
+    {
+        let json =
+            """
+            {
+              "id": "legacy",
+              "kind": "openAI",
+              "providerID": "openai",
+              "displayName": "OpenAI",
+              "model": "gpt-5",
+              "baseURL": "https://api.openai.com/v1",
+              "credentialKind": {
+                "bearerToken": {}
+              }
+            }
+            """
+
+        let profile =
+            try JSONDecoder().decode(
+                AIProviderProfile.self,
+                from:
+                    Data(
+                        json.utf8
+                    )
+            )
+
+        XCTAssertEqual(
+            profile.timeout,
+            60
+        )
+        XCTAssertNil(
+            profile.defaultMaxOutputTokens
+        )
+        XCTAssertNil(
+            profile.defaultTemperature
+        )
+    }
+
+    func testRejectsInvalidExecutionDefaults()
+    {
+        let invalidTimeout =
+            AIProviderProfile(
+                id: "custom",
+                kind:
+                    .openAICompatible,
+                providerID:
+                    "custom",
+                displayName:
+                    "Custom",
+                model:
+                    "model",
+                baseURL:
+                    URL(
+                        string:
+                            "https://example.com/v1"
+                    )!,
+                credentialKind:
+                    .bearerToken,
+                timeout:
+                    0
+            )
+
+        XCTAssertThrowsError(
+            try AIProviderProfileValidator
+                .validate(
+                    invalidTimeout
+                )
+        ) {
+            error in
+
+            XCTAssertEqual(
+                error
+                    as? AIProviderProfileValidationError,
+                .invalidTimeout
+            )
+        }
+
+        let invalidTokens =
+            AIProviderProfile(
+                id: "custom",
+                kind:
+                    .openAICompatible,
+                providerID:
+                    "custom",
+                displayName:
+                    "Custom",
+                model:
+                    "model",
+                baseURL:
+                    URL(
+                        string:
+                            "https://example.com/v1"
+                    )!,
+                credentialKind:
+                    .bearerToken,
+                defaultMaxOutputTokens:
+                    0
+            )
+
+        XCTAssertThrowsError(
+            try AIProviderProfileValidator
+                .validate(
+                    invalidTokens
+                )
+        ) {
+            error in
+
+            XCTAssertEqual(
+                error
+                    as? AIProviderProfileValidationError,
+                .invalidMaxOutputTokens
+            )
+        }
+    }
+
     func testProfileRoundTripsThroughCodable()
         throws
     {
