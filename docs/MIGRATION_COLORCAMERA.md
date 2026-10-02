@@ -202,6 +202,15 @@ Local-model lifecycle status:
 - clearing preparation keeps installed model assets and intentionally makes the next real use pay the first-use preparation cost again;
 - the product C ABI remains one-to-one with those lifecycle semantics: `CCACoreAIPrepare`, `CCACoreAILoad`, `CCACoreAIReset`, and `CCACoreAIClearPreparationCache`.
 
+Execution-policy status:
+
+- ColorCamera now exposes an explicit product-owned execution mode: **Automatic**, **On-device**, or **Cloud**.
+- Automatic preserves the ordered local-first behavior and only continues to an enabled/configured cloud provider when the local path cannot return a valid result.
+- On-device excludes cloud providers entirely.
+- Cloud excludes Apple/Core AI providers, skips launch-time local-model bootstrap, and unloads current Core AI residency when selected without clearing persistent preparation.
+- This policy remains in ColorCamera rather than AICoreKit because it is user-facing product preference; AICoreKit supplies provider/lifecycle mechanisms, not the product's settings semantics.
+- Qwen model identity/resource/display metadata and lifecycle presentation are centralized in ColorCamera's shared local-model settings layer so Settings, first-use initialization, and launch bootstrap do not each own a lifecycle façade.
+
 Cloud-provider status:
 
 - ColorCamera links `AIProviderConfiguration` and uses `AIProviderPreset` / `AIConfiguredProviderFactory` instead of maintaining vendor endpoint/header construction;
