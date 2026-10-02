@@ -1,5 +1,6 @@
 import AICore
 import AIProviderConfiguration
+import Foundation
 import XCTest
 
 final class AIProviderConfigurationTests:
