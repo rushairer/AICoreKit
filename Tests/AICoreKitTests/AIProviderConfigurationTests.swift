@@ -1,7 +1,49 @@
 import AICore
+import AIHTTP
 import AIProviderConfiguration
 import Foundation
 import XCTest
+
+private actor ProviderProfileRecordingTransport:
+    AIHTTPTransport
+{
+    private var request:
+        URLRequest?
+
+    func data(
+        for request: URLRequest
+    ) async throws -> AIHTTPResponse {
+        self.request = request
+
+        let data =
+            """
+            {
+              "choices": [
+                {
+                  "message": {
+                    "content": "ok"
+                  },
+                  "finish_reason": "stop"
+                }
+              ]
+            }
+            """
+            .data(
+                using: .utf8
+            )!
+
+        return AIHTTPResponse(
+            data: data,
+            statusCode: 200
+        )
+    }
+
+    func capturedRequest()
+        -> URLRequest?
+    {
+        request
+    }
+}
 
 final class AIProviderConfigurationTests:
     XCTestCase
@@ -148,6 +190,89 @@ final class AIProviderConfigurationTests:
                     .validate(profile)
             )
         }
+    }
+
+    func testFactoryAppliesProfileExecutionDefaultsToRequest()
+        async throws
+    {
+        let transport =
+            ProviderProfileRecordingTransport()
+        let credentials =
+            ClosureAICredentialProvider {
+                _ in
+                "fixture"
+            }
+        let factory =
+            AIConfiguredProviderFactory(
+                credentialProvider:
+                    credentials,
+                transport:
+                    transport
+            )
+        let profile =
+            try AIProviderPreset
+            .customOpenAICompatible
+            .profile(
+                id: "fixture",
+                model: "fixture-model",
+                baseURL:
+                    URL(
+                        string:
+                            "https://example.com/v1"
+                    )!,
+                timeout: 17,
+                defaultMaxOutputTokens:
+                    123,
+                defaultTemperature:
+                    0.35
+            )
+        let provider =
+            try factory.makeProvider(
+                from: profile
+            )
+
+        _ = try await provider.generate(
+            AIRequest(
+                messages: [
+                    .user("hello")
+                ]
+            )
+        )
+
+        let request =
+            try XCTUnwrap(
+                await transport
+                    .capturedRequest()
+            )
+
+        XCTAssertEqual(
+            request.timeoutInterval,
+            17
+        )
+
+        let bodyData =
+            try XCTUnwrap(
+                request.httpBody
+            )
+        let body =
+            try XCTUnwrap(
+                JSONSerialization
+                    .jsonObject(
+                        with: bodyData
+                    )
+                    as? [String: Any]
+            )
+
+        XCTAssertEqual(
+            body["max_tokens"]
+                as? Int,
+            123
+        )
+        XCTAssertEqual(
+            body["temperature"]
+                as? Double,
+            0.35
+        )
     }
 
     func testPresetPreservesExecutionDefaults()
