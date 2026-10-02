@@ -146,7 +146,7 @@ public enum AIProviderPreset:
                 ?? defaultBaseURL
         else {
             throw AIProviderProfileValidationError
-                .missingHost
+                .missingBaseURL
         }
 
         let profile =
@@ -306,25 +306,34 @@ public enum AIProviderProfileValidationError:
     LocalizedError
 {
     case emptyIdentifier
+    case emptyProviderID
     case emptyDisplayName
     case emptyModel
+    case missingBaseURL
     case unsupportedURLScheme
     case missingHost
+    case incompatibleCredentialKind
 
     public var errorDescription:
         String?
     {
         switch self {
         case .emptyIdentifier:
+            return "Provider profile identifier is required."
+        case .emptyProviderID:
             return "Provider identifier is required."
         case .emptyDisplayName:
             return "Provider display name is required."
         case .emptyModel:
             return "Model name is required."
+        case .missingBaseURL:
+            return "Provider base URL is required."
         case .unsupportedURLScheme:
             return "Provider URL must use HTTP or HTTPS."
         case .missingHost:
             return "Provider URL must include a valid host."
+        case .incompatibleCredentialKind:
+            return "Credential kind is incompatible with the provider protocol."
         }
     }
 }
@@ -342,6 +351,17 @@ public enum AIProviderProfileValidator {
         else {
             throw AIProviderProfileValidationError
                 .emptyIdentifier
+        }
+
+        guard
+            !profile.providerID.rawValue
+                .trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+                .isEmpty
+        else {
+            throw AIProviderProfileValidationError
+                .emptyProviderID
         }
 
         guard
@@ -383,6 +403,30 @@ public enum AIProviderProfileValidator {
         else {
             throw AIProviderProfileValidationError
                 .missingHost
+        }
+
+        switch profile.kind {
+        case .openAI:
+            guard
+                profile.credentialKind
+                    == .bearerToken
+            else {
+                throw AIProviderProfileValidationError
+                    .incompatibleCredentialKind
+            }
+
+        case .anthropic,
+             .gemini:
+            guard
+                profile.credentialKind
+                    == .apiKey
+            else {
+                throw AIProviderProfileValidationError
+                    .incompatibleCredentialKind
+            }
+
+        case .openAICompatible:
+            break
         }
     }
 }
