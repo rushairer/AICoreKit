@@ -20,6 +20,10 @@ let package = Package(
                 .product(
                     name: "AIProviderCoreAI",
                     package: "AICoreKit"
+                ),
+                .product(
+                    name: "AIDiagnostics",
+                    package: "AICoreKit"
                 )
             ]
         )
