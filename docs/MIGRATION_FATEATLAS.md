@@ -225,6 +225,27 @@ After migration, FateAtlas should no longer need its own copies of:
 
 The product should still own its domain service layer.
 
+## Migration status update — 2026-10-02
+
+Phase 1 is now live in FateAtlas:
+
+- FateAtlas main `ac795e3e` pins AICoreKit `590a67a4` through `Packages/AppAIKit`.
+- The AppAIKit compatibility layer preserves FateAtlas's existing public API, provider settings, and product-facing error/status semantics.
+- OpenAI-compatible chat and streaming now delegate to AICoreKit's `AIProviderOpenAICompatible`. This includes the DeepSeek/custom endpoint path.
+- Anthropic chat and streaming now delegate to `AIProviderAnthropic`.
+- The migrated paths no longer keep a second URLSession/SSE implementation inside AppAIKit.
+- AppAIKit package tests pass.
+- A code-signing-disabled **Release** generic iOS build of the full FateAtlas app passes with the AICoreKit-backed providers linked into the production target.
+
+The migration is intentionally incomplete:
+
+- `fetchModels()` and connection testing remain product-owned;
+- the current structured-generation fallback remains until native AICoreKit structured paths are migrated with behavior parity;
+- Apple local execution and the broader orchestration layer have not yet been collapsed into AICoreKit;
+- `Packages/AppAIKit` remains as a compatibility/product adapter layer and should not be deleted yet.
+
+This is sufficient to validate FateAtlas as a production consumer for the migrated cloud chat/streaming path, but not sufficient to declare the entire AppAIKit migration complete.
+
 ## Why FateAtlas matters to AICoreKit 1.0
 
 FateAtlas is the strongest migration test for the cloud/provider abstraction because it already uses Apple local execution, OpenAI-compatible services, Anthropic, DeepSeek/custom endpoints, structured tasks, streaming, fallback, and user-configurable provider settings.
