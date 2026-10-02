@@ -1,4 +1,5 @@
 import AICore
+import AIDiagnostics
 import AIProviderCoreAI
 import Foundation
 
@@ -61,6 +62,60 @@ private struct FixtureLifecycleBridge:
         modelPath: String
     ) async -> CoreAIBridgeStatus {
         .success
+    }
+}
+
+private struct FixtureDiagnosticProvider:
+    AIProvider,
+    AIPersistentResourceManaging
+{
+    let id: AIProviderID =
+        "fixture.swift5-diagnostics"
+
+    let displayName =
+        "Swift 5 Diagnostics Fixture"
+
+    let capabilities:
+        AICapabilities = [
+            .textGeneration,
+            .localExecution
+        ]
+
+    func availability()
+        async -> AIAvailability
+    {
+        .available
+    }
+
+    func isPersistentlyPrepared()
+        async -> Bool
+    {
+        true
+    }
+
+    func preparePersistentResources()
+        async throws
+    {}
+
+    func loadPreparedResources()
+        async throws
+    {}
+
+    func prepareResources()
+        async throws
+    {}
+
+    func releaseResources()
+        async throws
+    {}
+
+    func generate(
+        _ request: AIRequest
+    ) async throws -> AIResponse {
+        AIResponse(
+            text: "ok",
+            providerID: id
+        )
     }
 }
 
@@ -131,5 +186,22 @@ private struct Swift5LifecycleConsumer {
                 from: error
             )
         }
+
+        let diagnosticProvider =
+            FixtureDiagnosticProvider()
+        let report =
+            await AIDeviceValidationRunner()
+            .run(
+                provider:
+                    diagnosticProvider,
+                request:
+                    AIRequest(
+                        messages: [
+                            .user("hello")
+                        ]
+                    )
+            )
+
+        _ = try? report.jsonString()
     }
 }
