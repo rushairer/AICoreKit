@@ -10,7 +10,7 @@ The target is three production consumers with deliberately different workloads.
 | --- | --- | --- | --- |
 | ColorCamera | Pins AICoreKit `0d72ce0b`; local Core AI lifecycle uses reset-safe serialized readiness; optional cloud palette fallback uses `AIProviderConfiguration` with Keychain credentials | Shared local lifecycle + reusable cloud-provider infrastructure while palette semantics remain product-owned | iOS 26 host / iOS 27 local runtime, weak link, first-use preparation vs fast load, cloud descriptor-only fallback |
 | FateAtlas | Pins AICoreKit `f6660787`; AppAIKit keeps the product API while provider construction, chat/streaming, structured cloud paths, and connection-test protocol execution delegate to AICoreKit | Incrementally remove duplicated generic provider/runtime plumbing without leaking vendor details into product UI | OpenAI Responses, Anthropic, DeepSeek/custom compatible endpoints, structured generation, streaming/fallback |
-| MetronomePro | Pins AICoreKit `f6660787`; Practice Coach is Apple-local-first with optional user-configured cloud fallback through `AIProviderConfiguration` and Keychain | Evidence-grounded Practice Coach with reusable local/cloud routing | deterministic evidence boundary, local-first fallback, shared settings across MetronomePro/Metronome26 |
+| MetronomePro | Pins AICoreKit `0d72ce0b`; Practice Coach exposes Automatic / On-device / Cloud routing through `AIProviderConfiguration` and Keychain | Evidence-grounded Practice Coach with explicit local/cloud routing | deterministic evidence boundary, local-only vs remote-only policy, shared settings across MetronomePro/Metronome26 |
 
 ## What counts as a production consumer
 
@@ -84,18 +84,20 @@ Recommended validation scope:
 - structured next-exercise recommendation;
 - evidence-reference validation;
 - natural-language metronome/practice actions through tools;
-- Apple-local-first with optional cloud fallback.
+- explicit Automatic / On-device / Cloud Practice Coach execution policy.
 
 MetronomePro must preserve the architectural rule that generative AI interprets deterministic evidence rather than generating the evidence itself.
 
-Current adoption evidence as of 2026-10-02:
+Current adoption evidence as of 2026-10-03:
 
-- MetronomePro pins AICoreKit `f6660787` through `Packages/PracticeCoachAI`.
+- MetronomePro pins AICoreKit `0d72ce0b` through `Packages/PracticeCoachAI`.
 - `PracticeFeature` remains the deterministic source of session/activity/timing evidence; `PracticeCoachAI` owns only generative interpretation.
-- The default service registry contains Apple Foundation Models first and requests `.localFirst`. If the user explicitly enables a valid remote profile, the AICoreKit orchestrator may fall back to it after local generation fails.
+- Practice Coach execution mode is explicit product state: **Automatic** builds Apple + configured remote providers and requests `.localFirst`; **On-device** builds Apple only and requests `.localOnly`; **Cloud** builds remote only and requests `.remoteOnly`. An invalid/missing Cloud configuration does not silently fall back to Apple.
+- The configured service is recreated for each generated review, so a Settings change takes effect without restarting or recreating the session view.
 - Remote presets are constructed through `AIProviderConfiguration`; shared SettingsFeature UI edits provider/model/base-URL preferences and stores API credentials in Keychain.
-- MetronomePro and Metronome26 share the same settings implementation rather than forking provider configuration.
-- Contract tests protect the evidence-only request boundary and remote profile settings. Raw practice recordings are not sent to remote language models, and AI output cannot mutate factual practice time, goals, achievements, or leaderboard data.
+- MetronomePro and Metronome26 share the same SettingsFeature implementation, including the three-mode picker, full-width cloud connection-status rows, and all 15 SettingsFeature localizations.
+- Contract tests protect the evidence-only request boundary, execution-mode mapping, and remote profile settings. Raw practice recordings are not sent to remote language models, and AI output cannot mutate factual practice time, goals, achievements, or leaderboard data.
+- MetronomePro/26 currently use Apple Foundation Models for on-device Practice Coach generation. They do **not** yet embed AICoreKit's iOS 27 Core AI runtime or a Qwen model asset; that remains a separate packaging/resource integration if the product chooses to add a bundled local model.
 - Historical module-level validation remains useful evidence, but this round does not claim a new full-app Release/archive or CI result. Full application production validation remains open.
 
 Until a real current full-app production/Release build or archive succeeds, MetronomePro does **not** count as a completed production consumer.
