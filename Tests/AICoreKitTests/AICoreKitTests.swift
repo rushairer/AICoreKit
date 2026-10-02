@@ -3725,6 +3725,214 @@ extension AICoreKitTests {
         )
     }
 
+    func testCoreAIExplicitPreparationCoalescesConcurrentRequests() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: false
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        async let first: Void =
+            controller
+            .preparePersistentResources()
+        async let second: Void =
+            controller
+            .preparePersistentResources()
+
+        _ = try await (
+            first,
+            second
+        )
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            1
+        )
+        XCTAssertEqual(
+            counts.load,
+            0
+        )
+
+        let state =
+            await controller.currentState()
+        XCTAssertEqual(
+            state,
+            .prepared
+        )
+    }
+
+    func testCoreAIEnsureReadyJoinsExplicitPreparationThenLoadsOnce() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: false
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        let preparation =
+            Task {
+                try await controller
+                    .preparePersistentResources()
+            }
+
+        try await Task.sleep(
+            nanoseconds: 5_000_000
+        )
+
+        let readiness =
+            Task {
+                try await controller
+                    .ensureReady()
+            }
+
+        try await preparation.value
+        try await readiness.value
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            1
+        )
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+
+        let state =
+            await controller.currentState()
+        XCTAssertEqual(
+            state,
+            .ready
+        )
+    }
+
+    func testCoreAIExplicitLoadCoalescesConcurrentRequests() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: true
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        async let first: Void =
+            controller
+            .loadPreparedResources()
+        async let second: Void =
+            controller
+            .loadPreparedResources()
+
+        _ = try await (
+            first,
+            second
+        )
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            0
+        )
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+
+        let state =
+            await controller.currentState()
+        XCTAssertEqual(
+            state,
+            .ready
+        )
+    }
+
     func testCoreAIClearPreparationCacheKeepsLifecycleDistinct() async throws {
         let temporaryURL =
             FileManager.default
