@@ -53,7 +53,81 @@ final class AIProviderConfigurationTests:
             XCTAssertEqual(
                 error
                     as? AIProviderProfileValidationError,
-                .missingHost
+                .missingBaseURL
+            )
+        }
+    }
+
+    func testRejectsEmptyProviderIdentifier()
+    {
+        let profile =
+            AIProviderProfile(
+                id: "custom",
+                kind:
+                    .openAICompatible,
+                providerID:
+                    AIProviderID(
+                        rawValue: "   "
+                    ),
+                displayName:
+                    "Custom",
+                model:
+                    "model",
+                baseURL:
+                    URL(
+                        string:
+                            "https://example.com/v1"
+                    )!,
+                credentialKind:
+                    .bearerToken
+            )
+
+        XCTAssertThrowsError(
+            try AIProviderProfileValidator
+                .validate(profile)
+        ) {
+            error in
+
+            XCTAssertEqual(
+                error
+                    as? AIProviderProfileValidationError,
+                .emptyProviderID
+            )
+        }
+    }
+
+    func testRejectsCredentialKindThatDoesNotMatchDedicatedProvider()
+    {
+        let profile =
+            AIProviderProfile(
+                id: "openai",
+                kind:
+                    .openAI,
+                providerID:
+                    .openAI,
+                displayName:
+                    "OpenAI",
+                model:
+                    "model",
+                baseURL:
+                    URL(
+                        string:
+                            "https://api.openai.com/v1"
+                    )!,
+                credentialKind:
+                    .apiKey
+            )
+
+        XCTAssertThrowsError(
+            try AIProviderProfileValidator
+                .validate(profile)
+        ) {
+            error in
+
+            XCTAssertEqual(
+                error
+                    as? AIProviderProfileValidationError,
+                .incompatibleCredentialKind
             )
         }
     }
