@@ -218,12 +218,12 @@ The user's practice evidence sent to a remote provider should be minimized to wh
 
 The first production feature is now implemented and partially validated:
 
-- `Packages/PracticeCoachAI` is the product-side AI boundary. It depends on AICoreKit `590a67a4` and contains only the evidence DTO plus generative interpretation service.
+- `Packages/PracticeCoachAI` is the product-side AI boundary. MetronomePro main `98a48f0a` pins it to the validated AICoreKit baseline `794abcbd`; the package contains only the evidence DTO plus generative interpretation service.
 - `Packages/PracticeFeature` retains deterministic activity/timing evidence construction and the user-visible Practice Session Detail flow.
 - The service uses `DefaultAIOrchestrator` with `AppleFoundationModelsProvider`, requires only `.textGeneration`, and requests `.localFirst` execution.
 - AI prose remains ephemeral and cancellable. It cannot mutate factual Practice time, Estimated Effective Time, goals, streaks, achievements, or leaderboard submissions.
 - Contract tests verify that only deterministic evidence JSON and explicit unknowns are sent to the provider.
-- GitHub Actions successfully builds `PracticeCoachAI` in Release configuration and runs its tests without needing private `MetronomeEngine` access.
+- GitHub Actions successfully builds `PracticeCoachAI` in Release configuration and runs its tests against AICoreKit `794abcbd` without needing private `MetronomeEngine` access.
 - The full PracticeFeature and both iOS app Release builds are prepared in CI but remain skipped until `METRONOMEPRO_CI_READ_TOKEN` is configured. This keeps module validation distinct from application Release evidence.
 
 The extraction is intentional: it prevents the AI layer from inheriting DSP/engine responsibilities and gives AICoreKit a small, independently testable real-product consumer while preserving the product's deterministic evidence boundary.

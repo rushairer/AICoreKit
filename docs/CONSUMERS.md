@@ -64,7 +64,7 @@ FateAtlas is the strongest test that AICoreKit can replace an organically grown 
 
 Current adoption evidence as of 2026-10-02:
 
-- FateAtlas main `ac795e3e` pins AICoreKit revision `590a67a4` through `Packages/AppAIKit`.
+- FateAtlas main `03b65310` pins the validated AICoreKit baseline `794abcbd` through `Packages/AppAIKit`.
 - OpenAI-compatible chat/streaming (including DeepSeek/custom endpoints) and Anthropic chat/streaming execute through AICoreKit providers while AppAIKit preserves FateAtlas's existing public API.
 - Product-specific `fetchModels()`, connection testing, and current structured-output fallback remain in AppAIKit for incremental migration; the migrated chat/streaming path no longer maintains an independent URLSession/SSE transport implementation.
 - AppAIKit package tests pass.
@@ -89,10 +89,10 @@ MetronomePro must preserve the architectural rule that generative AI interprets 
 
 Current adoption evidence as of 2026-10-02:
 
-- MetronomePro main `c512b396` extracts the generative layer into `Packages/PracticeCoachAI`, pinned to AICoreKit revision `590a67a4`. `PracticeFeature` keeps deterministic session/activity/timing evidence construction and depends on the small AI package only for interpretation.
+- MetronomePro main `98a48f0a` keeps the generative layer in `Packages/PracticeCoachAI`, now pinned to the validated AICoreKit baseline `794abcbd`. `PracticeFeature` keeps deterministic session/activity/timing evidence construction and depends on the small AI package only for interpretation.
 - The production Practice Session Detail path still creates `PracticeCoachEvidence` from deterministic facts and calls `PracticeCoachService`; there is no alternate generic provider abstraction for this migrated path.
 - `PracticeCoachAI` uses AICoreKit `AICore`, `AIOrchestration`, and `AIProviderApple` with `.localFirst` text generation. Its contract tests verify that the request contains only the supplied evidence JSON plus explicit unknowns and cannot turn unmeasured time, motivation, cheating, pitch accuracy, or musical expression into facts.
-- MetronomePro main `f8386772` has repeatable CI evidence that `PracticeCoachAI` builds in **Release** configuration and its tests pass without access to the private `MetronomeEngine` repository.
+- MetronomePro main `98a48f0a` has repeatable CI evidence that `PracticeCoachAI` builds in **Release** configuration and its tests pass against AICoreKit `794abcbd` without access to the private `MetronomeEngine` repository.
 - Full `PracticeFeature`, MetronomePro, and Metronome26 Release builds remain gated by `METRONOMEPRO_CI_READ_TOKEN`. When the token is absent the workflow explicitly warns and skips those steps; the green workflow is therefore module-level evidence, not full application Release evidence.
 - Both Metronome Xcode Cloud workflows were already failing before the current AICoreKit/package extraction, so those historical red statuses are tracked separately rather than treated as proof of an AICoreKit regression.
 - Until a real full-app production/Release build or archive succeeds, MetronomePro does **not** count as a completed production consumer.
