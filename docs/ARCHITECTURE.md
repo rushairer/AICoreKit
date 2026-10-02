@@ -102,11 +102,13 @@ The iOS 27 runtime independently coalesces Core AI preparation and model loading
 Lifecycle unload and preparation-cache clearing enter an explicit reset gate before touching the runtime. While that gate is active, new prepare/load/ensure/bootstrap requests are rejected with cancellation instead of racing a reset. Reset also invalidates the current readiness generation, so a late native callback from an older prepare/load cannot transition the controller back to `ready`. Cache clearing waits for the invalidated readiness task to settle before the final persistent-cache removal, covering bridges whose native preparation cannot be cancelled synchronously.
 
 
-### Lifecycle observation
+### Lifecycle observation and settings state
 
 `CoreAIModelLifecycleController.stateChanges(includeCurrentState:)` exposes a multi-subscriber `AsyncStream` of product-neutral lifecycle states. It emits only real state transitions and can optionally begin with the current state.
 
-Consumer UI should map this stream into product wording and actions instead of maintaining a second prepare/load/ready state machine. Request-execution stages such as model warming, text generation, and product-side validation remain separate from model lifecycle state.
+For product Settings / first-use model UX, `CoreAIModelSettingsStore` is the reusable MainActor observable layer. It owns a `CoreAIModelProfile`, subscribes to the lifecycle stream, publishes the current `CoreAIModelLifecycleState`, and delegates refresh, launch bootstrap, persistent preparation, prepared-resource loading, full readiness, unload, and preparation-cache clearing to one shared lifecycle controller.
+
+Products still own wording, icons, confirmation UX, bundle/download policy, and model-specific presentation. They should consume `CoreAIModelSettingsStore` rather than creating another prepare/load/ready state machine. Request-execution stages such as model warming, text generation, and product-side validation remain separate from model lifecycle state.
 
 
 ## Device diagnostics
