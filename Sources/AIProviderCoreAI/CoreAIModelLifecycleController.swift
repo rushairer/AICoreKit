@@ -34,8 +34,10 @@ public actor CoreAIModelLifecycleController {
 
     private var readinessTask:
         Task<Void, Error>?
-    private var readinessGeneration:
+    private var readinessTaskID:
         UInt64?
+    private var nextReadinessTaskID:
+        UInt64 = 0
     private var generation: UInt64 = 0
 
     public init(
@@ -163,6 +165,24 @@ public actor CoreAIModelLifecycleController {
     public func preparePersistentResources()
         async throws
     {
+        if
+            state == .prepared
+                || state == .ready
+        {
+            return
+        }
+
+        if let readinessTask {
+            try await readinessTask.value
+
+            if
+                state == .prepared
+                    || state == .ready
+            {
+                return
+            }
+        }
+
         let resource =
             try await requiredResource()
 
@@ -173,26 +193,30 @@ public actor CoreAIModelLifecycleController {
             return
         }
 
-        generation &+= 1
-        let operationGeneration = generation
-        transition(to: .preparing)
-
-        let status = await bridge.prepare(
-            modelPath: resource.path
-        )
-
-        guard operationGeneration == generation else {
-            throw AIError.cancelled
+        let operationGeneration =
+            generation
+        let taskID =
+            allocateReadinessTaskID()
+        let task = Task {
+            try await self
+                .performPreparePersistent(
+                    resource: resource,
+                    expectedGeneration:
+                        operationGeneration
+                )
         }
+        readinessTask = task
+        readinessTaskID = taskID
 
         do {
-            try validate(
-                status,
-                operation: "prepare"
+            try await task.value
+            clearReadinessTask(
+                ifID: taskID
             )
-            transition(to: .prepared)
         } catch {
-            transition(to: .failed)
+            clearReadinessTask(
+                ifID: taskID
+            )
             throw error
         }
     }
@@ -202,6 +226,14 @@ public actor CoreAIModelLifecycleController {
     {
         if state == .ready {
             return
+        }
+
+        if let readinessTask {
+            try await readinessTask.value
+
+            if state == .ready {
+                return
+            }
         }
 
         let resource =
@@ -216,26 +248,30 @@ public actor CoreAIModelLifecycleController {
             )
         }
 
-        generation &+= 1
-        let operationGeneration = generation
-        transition(to: .loading)
-
-        let status = await bridge.load(
-            modelPath: resource.path
-        )
-
-        guard operationGeneration == generation else {
-            throw AIError.cancelled
+        let operationGeneration =
+            generation
+        let taskID =
+            allocateReadinessTaskID()
+        let task = Task {
+            try await self
+                .performLoadPrepared(
+                    resource: resource,
+                    expectedGeneration:
+                        operationGeneration
+                )
         }
+        readinessTask = task
+        readinessTaskID = taskID
 
         do {
-            try validate(
-                status,
-                operation: "load"
+            try await task.value
+            clearReadinessTask(
+                ifID: taskID
             )
-            transition(to: .ready)
         } catch {
-            transition(to: .failed)
+            clearReadinessTask(
+                ifID: taskID
+            )
             throw error
         }
     }
@@ -246,11 +282,17 @@ public actor CoreAIModelLifecycleController {
         }
 
         if let readinessTask {
-            return try await readinessTask.value
+            try await readinessTask.value
+
+            if state == .ready {
+                return
+            }
         }
 
         let operationGeneration =
             generation
+        let taskID =
+            allocateReadinessTaskID()
         let task = Task {
             try await self.performEnsureReady(
                 expectedGeneration:
@@ -258,19 +300,16 @@ public actor CoreAIModelLifecycleController {
             )
         }
         readinessTask = task
-        readinessGeneration =
-            operationGeneration
+        readinessTaskID = taskID
 
         do {
             try await task.value
             clearReadinessTask(
-                ifGeneration:
-                    operationGeneration
+                ifID: taskID
             )
         } catch {
             clearReadinessTask(
-                ifGeneration:
-                    operationGeneration
+                ifID: taskID
             )
             throw error
         }
@@ -286,7 +325,10 @@ public actor CoreAIModelLifecycleController {
 
         if let readinessTask {
             try await readinessTask.value
-            return state == .ready
+
+            if state == .ready {
+                return true
+            }
         }
 
         let resource =
@@ -301,6 +343,8 @@ public actor CoreAIModelLifecycleController {
 
         let operationGeneration =
             generation
+        let taskID =
+            allocateReadinessTaskID()
         let task = Task {
             try await self.performLoadPrepared(
                 resource: resource,
@@ -309,20 +353,17 @@ public actor CoreAIModelLifecycleController {
             )
         }
         readinessTask = task
-        readinessGeneration =
-            operationGeneration
+        readinessTaskID = taskID
 
         do {
             try await task.value
             clearReadinessTask(
-                ifGeneration:
-                    operationGeneration
+                ifID: taskID
             )
             return true
         } catch {
             clearReadinessTask(
-                ifGeneration:
-                    operationGeneration
+                ifID: taskID
             )
             throw error
         }
@@ -429,6 +470,47 @@ public actor CoreAIModelLifecycleController {
                     "clear preparation cache"
             )
             transition(to: .notPrepared)
+        } catch {
+            transition(to: .failed)
+            throw error
+        }
+    }
+
+    private func performPreparePersistent(
+        resource: CoreAIModelResource,
+        expectedGeneration: UInt64
+    ) async throws {
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        if await bridge.isPrepared(
+            modelPath: resource.path
+        ) {
+            try ensureCurrent(
+                expectedGeneration
+            )
+            transition(to: .prepared)
+            return
+        }
+
+        transition(to: .preparing)
+
+        let status =
+            await bridge.prepare(
+                modelPath: resource.path
+            )
+
+        try ensureCurrent(
+            expectedGeneration
+        )
+
+        do {
+            try validate(
+                status,
+                operation: "prepare"
+            )
+            transition(to: .prepared)
         } catch {
             transition(to: .failed)
             throw error
@@ -545,24 +627,31 @@ public actor CoreAIModelLifecycleController {
             readinessTask
         readinessTask?.cancel()
         readinessTask = nil
-        readinessGeneration = nil
+        readinessTaskID = nil
 
         return pendingTask
     }
 
+    private func allocateReadinessTaskID()
+        -> UInt64
+    {
+        let taskID =
+            nextReadinessTaskID
+        nextReadinessTaskID &+= 1
+        return taskID
+    }
+
     private func clearReadinessTask(
-        ifGeneration operationGeneration:
-            UInt64
+        ifID taskID: UInt64
     ) {
         guard
-            readinessGeneration
-                == operationGeneration
+            readinessTaskID == taskID
         else {
             return
         }
 
         readinessTask = nil
-        readinessGeneration = nil
+        readinessTaskID = nil
     }
 
     private func transition(
