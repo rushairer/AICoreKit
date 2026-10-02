@@ -201,6 +201,8 @@ Do not move DSP into the language model.
 
 If MetronomePro adopts the Core AI runtime, reuse AICoreKit's generic Core AI boundary rather than cloning ColorCamera's product-specific C ABI. Product-specific model packaging/resource UX remains owned by MetronomePro.
 
+MetronomePro/26 currently use Apple Foundation Models for the On-device Practice Coach path. They do not yet embed `AICoreKitCoreAIRuntime.framework` or bundle a Qwen/Core AI model asset. A future Qwen integration should use AICoreKit `CoreAIModelProfile`, `CoreAIModelSettingsStore`, `CoreAIDirectoryModelResourceProvider`, and the product-neutral weak-link runtime rather than recreating ColorCamera's product-specific lifecycle façade.
+
 ## Cloud option
 
 Cloud providers can be enabled without coupling product code to a vendor:
@@ -216,7 +218,7 @@ The user's practice evidence sent to a remote provider should be minimized to wh
 
 ## Migration status update — 2026-10-02
 
-MetronomePro now pins the shared AICoreKit baseline `f6660787` through `Packages/PracticeCoachAI`.
+MetronomePro now pins AICoreKit baseline `0d72ce0b` through `Packages/PracticeCoachAI`.
 
 The production boundary remains deliberately small:
 
@@ -226,12 +228,15 @@ The production boundary remains deliberately small:
 
 Provider behavior is now:
 
-- Apple Foundation Models remains first in the registry and requests use `.localFirst`;
-- when the user explicitly configures cloud fallback, `PracticeCoachAI` constructs the remote provider through `AIProviderConfiguration`;
+- Practice Coach exposes explicit **Automatic / On-device / Cloud** execution modes through the shared SettingsFeature used by both MetronomePro and Metronome26;
+- Automatic registers Apple Foundation Models plus an enabled/configured remote provider and requests `.localFirst`;
+- On-device registers Apple Foundation Models only and requests `.localOnly`;
+- Cloud registers the configured remote provider only and requests `.remoteOnly`; a missing/invalid cloud configuration does not silently fall back to Apple;
+- each generated review resolves the current configured service, so mode/provider changes apply without restarting the app or recreating the session screen;
+- remote providers are constructed through `AIProviderConfiguration`;
 - supported presets include OpenAI, Anthropic, Gemini, DeepSeek, and a custom OpenAI-compatible endpoint;
 - provider/model/base-URL preferences are product settings, while API credentials are stored in Keychain;
-- if no valid remote configuration/credential exists, the service remains Apple-local exactly as before;
-- if Apple local generation fails and cloud fallback is configured, `DefaultAIOrchestrator` may continue to the remote provider before a first successful response.
+- cloud connection status uses the same full-width row/divider composition as the rest of Settings and user-facing success/failure strings are localized rather than exposing raw provider-library errors.
 
 Privacy/evidence boundary:
 
@@ -240,7 +245,7 @@ Privacy/evidence boundary:
 - missing analysis coverage remains an explicit unknown rather than being converted into inactivity, poor effort, cheating, pitch accuracy, expression, or other unmeasured claims;
 - AI prose remains advisory and cannot mutate practice duration, estimated effective time, goals, streaks, achievements, or leaderboard submissions.
 
-Contract tests cover the evidence-only request boundary plus remote-provider settings/profile construction. The shared Settings implementation is used by both MetronomePro and Metronome26, avoiding separate provider configuration forks.
+Contract tests cover the evidence-only request boundary, execution-mode mapping, and remote-provider settings/profile construction. The shared Settings implementation is used by both MetronomePro and Metronome26, avoiding separate provider configuration forks. SettingsFeature's current user-visible key set is complete across all 15 supported localizations, and a UI regression asserts that the shared Practice Coach settings expose three execution modes.
 
 No new full-app Release/CI evidence is claimed by this update. Application-level archive validation remains a later gate when build capacity/private dependency access is available.
 
