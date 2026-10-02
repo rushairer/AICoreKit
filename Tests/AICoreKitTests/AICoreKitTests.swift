@@ -4323,6 +4323,121 @@ extension AICoreKitTests {
 
 
 extension AICoreKitTests {
+    func testCoreAIClearRejectsNewReadinessUntilResetCompletes() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            SlowNonCancellingCoreAILifecycleBridge()
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        let firstReadiness =
+            Task {
+                try await controller
+                    .ensureReady()
+            }
+
+        while
+            await bridge.snapshot()
+                .prepare == 0
+        {
+            try await Task.sleep(
+                nanoseconds:
+                    1_000_000
+            )
+        }
+
+        let clearing =
+            Task {
+                try await controller
+                    .clearPreparationCache()
+            }
+
+        while
+            await bridge.snapshot()
+                .unload == 0
+        {
+            try await Task.sleep(
+                nanoseconds:
+                    1_000_000
+            )
+        }
+
+        do {
+            try await controller
+                .ensureReady()
+            XCTFail(
+                "Expected readiness to be rejected while reset is active"
+            )
+        } catch let error as AIError {
+            XCTAssertEqual(
+                error,
+                .cancelled
+            )
+        }
+
+        try await clearing.value
+
+        do {
+            try await firstReadiness.value
+            XCTFail(
+                "Expected the original readiness operation to be invalidated"
+            )
+        } catch let error as AIError {
+            XCTAssertEqual(
+                error,
+                .cancelled
+            )
+        }
+
+        let snapshot =
+            await bridge.snapshot()
+        XCTAssertEqual(
+            snapshot.prepare,
+            1
+        )
+        XCTAssertEqual(
+            snapshot.load,
+            0
+        )
+        XCTAssertEqual(
+            snapshot.clear,
+            1
+        )
+        XCTAssertFalse(
+            snapshot.prepared
+        )
+    }
+}
+
+
+extension AICoreKitTests {
     func testCoreAILifecycleStateChangesReachMultipleSubscribers() async throws {
         let temporaryURL =
             FileManager.default
