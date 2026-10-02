@@ -190,7 +190,7 @@ When ColorCamera migrates its Core AI provider, its product-specific initializat
 
 ## Migration status update — 2026-10-02
 
-ColorCamera now consumes the shared AICoreKit baseline `f6660787` for both local lifecycle coordination and optional cloud-provider configuration.
+ColorCamera now consumes AICoreKit baseline `0d72ce0b` for shared local lifecycle/settings coordination plus cloud-provider configuration.
 
 Local-model lifecycle status:
 
@@ -209,13 +209,13 @@ Execution-policy status:
 - On-device excludes cloud providers from Color Intelligence analysis; an explicit Settings connection test remains a separate user action.
 - Cloud excludes Apple/Core AI providers, skips launch-time local-model bootstrap, and unloads current Core AI residency when selected without clearing persistent preparation.
 - This policy remains in ColorCamera rather than AICoreKit because it is user-facing product preference; AICoreKit supplies provider/lifecycle mechanisms, not the product's settings semantics.
-- AICoreKit now provides `CoreAIModelProfile` for reusable model identifier/display/source metadata. ColorCamera centralizes its Qwen profile instance, product bundle resource name, and lifecycle presentation in its shared local-model settings layer so Settings, first-use initialization, and launch bootstrap do not each own a lifecycle façade.
+- AICoreKit now provides `CoreAIModelProfile` for reusable model identity and `CoreAIModelSettingsStore` for observable lifecycle state/actions. ColorCamera centralizes only its Qwen profile instance, product bundle resource name, and localized presentation; Settings, first-use initialization, and launch bootstrap all consume the same AICoreKit store and the former product-side lifecycle store has been removed.
 
 Cloud-provider status:
 
 - ColorCamera links `AIProviderConfiguration` and uses `AIProviderPreset` / `AIConfiguredProviderFactory` instead of maintaining vendor endpoint/header construction;
 - Settings keeps provider/model/base-URL policy in the product and stores API credentials in Keychain;
-- cloud execution is opt-in and ordered after Apple on-device intelligence and the local Core AI model;
+- cloud execution is controlled by ColorCamera's explicit execution mode: Automatic is local-first, On-device excludes cloud from analysis, and Cloud excludes local generation;
 - the remote provider receives deterministic palette descriptors only. Photos and camera frames are never sent to the cloud fallback;
 - product-specific palette prompts, language validation, role validation, and authoritative HEX mapping remain inside ColorCamera.
 
