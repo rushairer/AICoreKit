@@ -4957,6 +4957,107 @@ private struct UnavailableDiagnosticProvider:
 
 
 extension AICoreKitTests {
+    func testCoreAIModelProfilePreservesReusableIdentityMetadata() throws {
+        let profile =
+            CoreAIModelProfile(
+                identifier:
+                    "qwen3-0.6b",
+                displayName:
+                    "Qwen3-0.6B",
+                sourceIdentifier:
+                    "Qwen/Qwen3-0.6B"
+            )
+
+        let data =
+            try JSONEncoder()
+            .encode(profile)
+        let decoded =
+            try JSONDecoder()
+            .decode(
+                CoreAIModelProfile.self,
+                from: data
+            )
+
+        XCTAssertEqual(
+            decoded,
+            profile
+        )
+        XCTAssertEqual(
+            decoded.identifier,
+            "qwen3-0.6b"
+        )
+        XCTAssertEqual(
+            decoded.displayName,
+            "Qwen3-0.6B"
+        )
+        XCTAssertEqual(
+            decoded.sourceIdentifier,
+            "Qwen/Qwen3-0.6B"
+        )
+    }
+
+    func testDirectoryModelResourceProviderAcceptsModelProfile() async throws {
+        let root =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString,
+                isDirectory: true
+            )
+        try FileManager.default
+            .createDirectory(
+                at: root,
+                withIntermediateDirectories:
+                    true
+            )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: root
+                )
+        }
+
+        let asset =
+            root.appendingPathComponent(
+                "fixture.aimodel"
+            )
+        try Data().write(
+            to: asset
+        )
+
+        let profile =
+            CoreAIModelProfile(
+                identifier:
+                    "fixture.profile",
+                displayName:
+                    "Fixture Model",
+                sourceIdentifier:
+                    "fixture/source"
+            )
+        let provider =
+            CoreAIDirectoryModelResourceProvider(
+                profile: profile,
+                directoryURL: root
+            )
+
+        let resource =
+            try await provider
+            .modelResource()
+
+        XCTAssertEqual(
+            provider.identifier,
+            profile.identifier
+        )
+        XCTAssertEqual(
+            resource?.identifier,
+            profile.identifier
+        )
+        XCTAssertEqual(
+            resource?.path,
+            root.path
+        )
+    }
+
     func testDirectoryModelResourceProviderRequiresModelAsset() async throws {
         let root =
             FileManager.default
