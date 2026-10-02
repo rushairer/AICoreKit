@@ -52,7 +52,6 @@ public actor CoreAIModelLifecycleController {
             await bridge.availability() == .available,
             let resource =
                 try? await resourceProvider.modelResource(),
-            let resource,
             resource.exists
         else {
             return false
@@ -90,7 +89,6 @@ public actor CoreAIModelLifecycleController {
         guard
             let resource =
                 try? await resourceProvider.modelResource(),
-            let resource,
             resource.exists
         else {
             state = .missingModel
