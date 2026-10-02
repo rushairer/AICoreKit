@@ -5,6 +5,58 @@ import XCTest
 final class AIProviderConfigurationTests:
     XCTestCase
 {
+    func testSharedPresetBuildsDeepSeekProfile()
+        throws
+    {
+        let profile =
+            try AIProviderPreset
+            .deepSeek
+            .profile(
+                id: "consumer.deepseek",
+                model: "deepseek-chat"
+            )
+
+        XCTAssertEqual(
+            profile.kind,
+            .openAICompatible
+        )
+        XCTAssertEqual(
+            profile.providerID,
+            AIProviderID(
+                rawValue: "deepseek"
+            )
+        )
+        XCTAssertEqual(
+            profile.baseURL
+                .absoluteString,
+            "https://api.deepseek.com/v1"
+        )
+        XCTAssertEqual(
+            profile.credentialKind,
+            .bearerToken
+        )
+    }
+
+    func testCustomPresetRequiresBaseURL()
+    {
+        XCTAssertThrowsError(
+            try AIProviderPreset
+                .customOpenAICompatible
+                .profile(
+                    id: "consumer.custom",
+                    model: "model"
+                )
+        ) {
+            error in
+
+            XCTAssertEqual(
+                error
+                    as? AIProviderProfileValidationError,
+                .missingHost
+            )
+        }
+    }
+
     func testBuiltInProfilesValidate()
         throws
     {
