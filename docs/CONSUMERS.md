@@ -65,6 +65,7 @@ Current adoption evidence as of 2026-10-02:
 
 - FateAtlas pins AICoreKit `f6660787` through `Packages/AppAIKit`.
 - AppAIKit now directly depends on `AICore` and `AIProviderConfiguration` rather than directly depending on each concrete cloud-provider target.
+- FateAtlas now stores API credentials in Keychain while leaving non-secret provider/model/base-URL/strategy preferences in UserDefaults; legacy plaintext credentials migrate on first read and are removed after successful secure persistence.
 - Its existing OpenAI Responses, Anthropic, and OpenAI-compatible wrappers construct validated `AIProviderProfile` values and delegate provider creation to `AIConfiguredProviderFactory`, preserving endpoint/model/provider identity plus timeout/token/temperature defaults.
 - OpenAI generation and connection testing both use the Responses path; Anthropic uses the Anthropic path; DeepSeek/custom compatible endpoints use the compatible path. Duplicate raw URLSession/header implementations that existed only for connection testing were removed.
 - Native structured generation remains enabled where the provider contract supports it; DeepSeek/custom compatible structured output keeps the product's validated fallback because generic compatible endpoints do not guarantee one JSON-schema extension.
