@@ -18,7 +18,7 @@
 - [x] Add a live weak-symbol host bridge using the stable C ABI.
 - [x] Add an isolated iOS/macOS 27 Core AI runtime Swift package.
 - [x] Add explicit model prepare / unload lifecycle hooks.
-- [x] Separate persistent Core AI preparation from current-process loading, including cache inspection, cache clearing, launch-safe bootstrap, and shared in-flight lifecycle tasks.
+- [x] Separate persistent Core AI preparation from current-process loading, including cache inspection, cache clearing, launch-safe bootstrap, serialized shared in-flight lifecycle tasks, and a reset gate that rejects new readiness while unload/cache-clear is active.
 - [x] Add a Qwen3-0.6B export and integration fixture without shipping model assets.
 - [x] Build and validate the iOS 27 runtime framework artifact on an Xcode 27 CI runner.
 - [x] Add a lower-minimum Mach-O host fixture that proves the runtime is weak-linked.
@@ -35,6 +35,7 @@
 - [x] Gemini provider.
 - [x] Dedicated OpenAI Responses API provider.
 - [x] Gateway-oriented credential examples and retry/observability hooks.
+- [x] Reusable validated/codable provider profiles and presets with execution defaults, factory construction, and product-owned credential persistence.
 
 ## 0.4 Structured generation and tools
 
