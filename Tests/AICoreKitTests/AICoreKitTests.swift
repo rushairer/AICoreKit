@@ -4054,3 +4054,89 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testCoreAIEnsureReadyPublishesFailedWhenFirstPreparationFails() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge:
+                    LifecycleStubCoreAIBridge(
+                        initiallyPrepared:
+                            false,
+                        prepareStatus:
+                            .modelLoadFailed
+                    ),
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        let stream =
+            await controller.stateChanges()
+
+        do {
+            try await controller
+                .ensureReady()
+            XCTFail(
+                "Expected first preparation to fail"
+            )
+        } catch let error as AIError {
+            switch error {
+            case .unavailable(
+                .modelNotReady
+            ):
+                break
+            default:
+                XCTFail(
+                    "Unexpected error: \(error)"
+                )
+            }
+        }
+
+        var iterator =
+            stream.makeAsyncIterator()
+        var states:
+            [CoreAIModelLifecycleState] = []
+
+        for _ in 0..<3 {
+            if let value =
+                await iterator.next()
+            {
+                states.append(value)
+            }
+        }
+
+        XCTAssertEqual(
+            states,
+            [
+                .notPrepared,
+                .preparing,
+                .failed
+            ]
+        )
+    }
+}

@@ -452,10 +452,15 @@ public actor CoreAIModelLifecycleController {
                 expectedGeneration
             )
 
-            try validate(
-                prepareStatus,
-                operation: "prepare"
-            )
+            do {
+                try validate(
+                    prepareStatus,
+                    operation: "prepare"
+                )
+            } catch {
+                transition(to: .failed)
+                throw error
+            }
         }
 
         try await performLoadPrepared(
