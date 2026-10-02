@@ -8,7 +8,7 @@ The target is three production consumers with deliberately different workloads.
 
 | Product | Current state | Intended AICoreKit role | Main validation |
 | --- | --- | --- | --- |
-| ColorCamera | Pins AICoreKit `f6660787`; local Core AI lifecycle uses reset-safe serialized readiness; optional cloud palette fallback uses `AIProviderConfiguration` with Keychain credentials | Shared local lifecycle + reusable cloud-provider infrastructure while palette semantics remain product-owned | iOS 26 host / iOS 27 local runtime, weak link, first-use preparation vs fast load, cloud descriptor-only fallback |
+| ColorCamera | Pins AICoreKit `0d72ce0b`; local Core AI lifecycle uses reset-safe serialized readiness; optional cloud palette fallback uses `AIProviderConfiguration` with Keychain credentials | Shared local lifecycle + reusable cloud-provider infrastructure while palette semantics remain product-owned | iOS 26 host / iOS 27 local runtime, weak link, first-use preparation vs fast load, cloud descriptor-only fallback |
 | FateAtlas | Pins AICoreKit `f6660787`; AppAIKit keeps the product API while provider construction, chat/streaming, structured cloud paths, and connection-test protocol execution delegate to AICoreKit | Incrementally remove duplicated generic provider/runtime plumbing without leaking vendor details into product UI | OpenAI Responses, Anthropic, DeepSeek/custom compatible endpoints, structured generation, streaming/fallback |
 | MetronomePro | Pins AICoreKit `f6660787`; Practice Coach is Apple-local-first with optional user-configured cloud fallback through `AIProviderConfiguration` and Keychain | Evidence-grounded Practice Coach with reusable local/cloud routing | deterministic evidence boundary, local-first fallback, shared settings across MetronomePro/Metronome26 |
 
@@ -39,11 +39,11 @@ ColorCamera should not be forced to remove its product-specific `@Generable` App
 
 Current adoption evidence as of 2026-10-02:
 
-- ColorCamera pins AICoreKit `f6660787` in both the Xcode project and committed `Package.resolved`.
-- `CoreAIModelLifecycleController` now owns the reusable lifecycle: persistent preparation, prepared-resource loading, full readiness, and launch bootstrap share serialized in-flight work; unload/cache-clear gate out new readiness until reset finishes.
+- ColorCamera pins AICoreKit `0d72ce0b` in the Xcode project, committed `Package.resolved`, and pre-build revision gate.
+- `CoreAIModelLifecycleController` owns the reusable lifecycle and `CoreAIModelSettingsStore` now owns the reusable observable Settings/first-use state+actions layer. ColorCamera deleted its product-side lifecycle store and shares the AICoreKit store across Settings, first-use initialization, and launch bootstrap.
 - The product-owned iOS 27 `ColorCameraCoreAI` runtime and its weak C ABI remain the compatibility boundary for palette generation. The iOS 26 host does not directly import the higher-minimum Core AI runtime.
 - Historical Xcode 27 archive/weak-link fixture evidence remains valid for the established cross-version topology, but this round does not claim a new signed archive or Xcode Cloud result.
-- ColorCamera also links `AIProviderConfiguration`. Cloud fallback is opt-in, comes after on-device providers, stores API credentials in Keychain, and sends deterministic palette descriptors rather than photos/camera frames.
+- ColorCamera also links `AIProviderConfiguration`. Its explicit Automatic / On-device / Cloud product policy selects the permitted provider path; cloud access remains opt-in, stores API credentials in Keychain, and sends deterministic palette descriptors rather than photos/camera frames.
 - Provider endpoints/protocol construction come from AICoreKit presets/factory. Palette prompts, localization checks, role validation, and authoritative HEX mapping remain product-owned.
 - Signed-device iOS 26/iOS 27 qualification, repeated memory/thermal/cancellation observation, and current Release/distribution validation remain open gates before ColorCamera counts as a completed production consumer.
 
