@@ -4140,3 +4140,73 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testCoreAIUnloadFailurePublishesFailedState() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge:
+                    LifecycleStubCoreAIBridge(
+                        initiallyPrepared:
+                            true,
+                        unloadStatus:
+                            .modelLoadFailed
+                    ),
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        _ = try await controller
+            .bootstrapIfPrepared()
+
+        do {
+            try await controller.unload()
+            XCTFail(
+                "Expected unload to fail"
+            )
+        } catch let error as AIError {
+            switch error {
+            case .unavailable(
+                .modelNotReady
+            ):
+                break
+            default:
+                XCTFail(
+                    "Unexpected error: \(error)"
+                )
+            }
+        }
+
+        let state =
+            await controller.currentState()
+        XCTAssertEqual(
+            state,
+            .failed
+        )
+    }
+}

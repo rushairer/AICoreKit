@@ -344,10 +344,16 @@ public actor CoreAIModelLifecycleController {
             await bridge.unload(
                 modelPath: resource.path
             )
-        try validate(
-            initialStatus,
-            operation: "unload"
-        )
+
+        do {
+            try validate(
+                initialStatus,
+                operation: "unload"
+            )
+        } catch {
+            transition(to: .failed)
+            throw error
+        }
 
         if let pendingTask {
             _ = try? await pendingTask.value
@@ -356,10 +362,16 @@ public actor CoreAIModelLifecycleController {
                 await bridge.unload(
                     modelPath: resource.path
                 )
-            try validate(
-                finalStatus,
-                operation: "unload"
-            )
+
+            do {
+                try validate(
+                    finalStatus,
+                    operation: "unload"
+                )
+            } catch {
+                transition(to: .failed)
+                throw error
+            }
         }
 
         let postUnloadState:
@@ -390,10 +402,16 @@ public actor CoreAIModelLifecycleController {
             await bridge.unload(
                 modelPath: resource.path
             )
-        try validate(
-            unloadStatus,
-            operation: "unload"
-        )
+
+        do {
+            try validate(
+                unloadStatus,
+                operation: "unload"
+            )
+        } catch {
+            transition(to: .failed)
+            throw error
+        }
 
         if let pendingTask {
             _ = try? await pendingTask.value
