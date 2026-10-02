@@ -190,19 +190,26 @@ When ColorCamera migrates its Core AI provider, its product-specific initializat
 
 ## Migration status update — 2026-10-02
 
-ColorCamera has completed the first real lifecycle-infrastructure adoption:
+ColorCamera now consumes the shared AICoreKit baseline `f6660787` for both local lifecycle coordination and optional cloud-provider configuration.
 
-- main `be6c77e2` pins the validated AICoreKit baseline `794abcbd`;
-- the iOS 26 host links only `AICore` and `AIProviderCoreAI`;
-- `CoreAIModelPrewarmer` delegates lifecycle coordination to `CoreAIModelLifecycleController`;
-- persistent preparation and current-process residency remain separate;
-- app launch uses `bootstrapIfPrepared()`, which never triggers first-use preparation on an unprepared model;
-- runtime unload and persistent preparation-cache clearing are distinct;
-- concurrent readiness work is coalesced and reset/cache-clear invalidates stale native completions;
-- a Swift 5 consumer fixture now protects the host-language compatibility used by ColorCamera;
-- the product C ABI now mirrors AICoreKit lifecycle semantics directly: `CCACoreAIPrepare` performs persistent preparation, `CCACoreAILoad` performs process loading, `CCACoreAIReset` unloads residency, and `CCACoreAIClearPreparationCache` removes persistent preparation; `CCACoreAIPrewarm` remains compatibility-only;
-- Xcode 27 product Core AI Release archive passes after this split, and the iOS 26 host fixture proves `IsAvailable`, `Prepare`, and `Load` all remain weak references.
+Local-model lifecycle status:
 
-The product-specific `ColorCameraCoreAI` generation/repair runtime remains intentionally in place. This is an incremental migration, not an attempt to erase the product adapter.
+- the iOS 26 host still weak-links the product-owned iOS 27 `ColorCameraCoreAI` runtime;
+- persistent first-use preparation remains distinct from current-process model loading;
+- app launch uses `bootstrapIfPrepared()`, so an unprepared model is never subjected to the long first preparation merely because the app started;
+- explicit prepare/load/full-readiness/bootstrap requests are serialized by `CoreAIModelLifecycleController` before asynchronous resource checks, preventing actor reentrancy from duplicating native prepare/load work;
+- unload and preparation-cache clearing enter a reset gate; new readiness requests are rejected while reset is active, and late native callbacks from invalidated operations cannot restore stale `ready` state;
+- clearing preparation keeps installed model assets and intentionally makes the next real use pay the first-use preparation cost again;
+- the product C ABI remains one-to-one with those lifecycle semantics: `CCACoreAIPrepare`, `CCACoreAILoad`, `CCACoreAIReset`, and `CCACoreAIClearPreparationCache`.
 
-ColorCamera's product Core AI archive boundary is now validated independently from the historical Xcode Cloud failure. Xcode Cloud was already failing on the pre-migration baseline `ca333dd1` and earlier commits, so that remains a separate app-level CI/release issue. The remaining production gate is a full signed ColorCamera Release/archive/distribution path plus signed iOS 26/iOS 27 device validation.
+Cloud-provider status:
+
+- ColorCamera links `AIProviderConfiguration` and uses `AIProviderPreset` / `AIConfiguredProviderFactory` instead of maintaining vendor endpoint/header construction;
+- Settings keeps provider/model/base-URL policy in the product and stores API credentials in Keychain;
+- cloud execution is opt-in and ordered after Apple on-device intelligence and the local Core AI model;
+- the remote provider receives deterministic palette descriptors only. Photos and camera frames are never sent to the cloud fallback;
+- product-specific palette prompts, language validation, role validation, and authoritative HEX mapping remain inside ColorCamera.
+
+The product-specific `ColorCameraCoreAI` generation/repair runtime remains intentionally in place. The shared library owns lifecycle and provider infrastructure, not ColorCamera's palette domain.
+
+No new full signed archive/CI evidence is claimed by this update. Remaining production qualification still includes signed-device lower-OS launch, iOS 27 real inference under repeated use, memory/thermal/cancellation observation, and Release/distribution validation when build capacity is available.
