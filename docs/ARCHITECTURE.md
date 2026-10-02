@@ -95,10 +95,11 @@ ready
 
 `releaseResources()` unloads only current-process residency. `clearPreparationCache()` unloads first and then removes persistent specialization while leaving installed model files untouched.
 
-Provider instances share one lifecycle controller internally, and that actor coalesces concurrent prepare/load requests into a single in-flight readiness task. The iOS 27 runtime independently coalesces Core AI preparation and model loading as a second safety boundary.
+Provider instances share one lifecycle controller internally. All forward readiness operations — explicit persistent preparation, explicit prepared-resource loading, full `ensureReady()`, and launch-safe `bootstrapIfPrepared()` — register or join the shared in-flight task **before** performing asynchronous resource/preparation checks. Callers that wake after an earlier phase completes re-check the shared task/state and join a successor load when one already exists. This prevents actor reentrancy from turning concurrent UI, bootstrap, and inference requests into duplicate native prepare/load operations.
 
+The iOS 27 runtime independently coalesces Core AI preparation and model loading as a second safety boundary.
 
-Lifecycle reset and cache-clear operations invalidate the current readiness generation before touching the runtime. A late native callback from a cancelled prepare/load is therefore stale and cannot transition the controller back to `ready`. Cache clearing additionally waits for the invalidated readiness task to settle before the final persistent-cache removal, covering bridges whose native preparation cannot be cancelled synchronously.
+Lifecycle unload and preparation-cache clearing enter an explicit reset gate before touching the runtime. While that gate is active, new prepare/load/ensure/bootstrap requests are rejected with cancellation instead of racing a reset. Reset also invalidates the current readiness generation, so a late native callback from an older prepare/load cannot transition the controller back to `ready`. Cache clearing waits for the invalidated readiness task to settle before the final persistent-cache removal, covering bridges whose native preparation cannot be cancelled synchronously.
 
 
 ### Lifecycle observation
