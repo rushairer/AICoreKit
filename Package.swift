@@ -93,6 +93,7 @@ let package = Package(
                 "AIHTTP",
                 "AIOrchestration",
                 "AITools",
+                "AIDiagnostics",
                 "AIProviderApple",
                 "AIProviderCoreAI",
                 "AIProviderOpenAICompatible",
