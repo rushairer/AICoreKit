@@ -44,6 +44,7 @@ public actor CoreAIModelLifecycleController {
     private var nextReadinessTaskID:
         UInt64 = 0
     private var generation: UInt64 = 0
+    private var resetInProgress = false
 
     public init(
         providerID: AIProviderID = .coreAI,
@@ -170,6 +171,8 @@ public actor CoreAIModelLifecycleController {
     public func preparePersistentResources()
         async throws
     {
+        try rejectIfResetting()
+
         if stateSatisfies(.prepared) {
             return
         }
@@ -212,6 +215,8 @@ public actor CoreAIModelLifecycleController {
     public func loadPreparedResources()
         async throws
     {
+        try rejectIfResetting()
+
         if stateSatisfies(.ready) {
             return
         }
@@ -252,6 +257,8 @@ public actor CoreAIModelLifecycleController {
     }
 
     public func ensureReady() async throws {
+        try rejectIfResetting()
+
         if stateSatisfies(.ready) {
             return
         }
@@ -294,6 +301,8 @@ public actor CoreAIModelLifecycleController {
     public func bootstrapIfPrepared()
         async throws -> Bool
     {
+        try rejectIfResetting()
+
         if stateSatisfies(.ready) {
             return true
         }
@@ -337,6 +346,11 @@ public actor CoreAIModelLifecycleController {
     }
 
     public func unload() async throws {
+        try beginReset()
+        defer {
+            endReset()
+        }
+
         let pendingTask =
             invalidateReadinessTask()
 
@@ -397,6 +411,11 @@ public actor CoreAIModelLifecycleController {
     public func clearPreparationCache()
         async throws
     {
+        try beginReset()
+        defer {
+            endReset()
+        }
+
         let pendingTask =
             invalidateReadinessTask()
 
@@ -644,6 +663,28 @@ public actor CoreAIModelLifecycleController {
             transition(to: .failed)
             throw error
         }
+    }
+
+    private func rejectIfResetting()
+        throws
+    {
+        guard !resetInProgress else {
+            throw AIError.cancelled
+        }
+    }
+
+    private func beginReset()
+        throws
+    {
+        guard !resetInProgress else {
+            throw AIError.cancelled
+        }
+
+        resetInProgress = true
+    }
+
+    private func endReset() {
+        resetInProgress = false
     }
 
     private func stateSatisfies(
