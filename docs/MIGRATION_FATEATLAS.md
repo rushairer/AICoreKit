@@ -227,34 +227,28 @@ The product should still own its domain service layer.
 
 ## Migration status update — 2026-10-02
 
-Phase 1 is now live in FateAtlas:
+FateAtlas now pins AICoreKit `f6660787` through `Packages/AppAIKit`. AppAIKit remains the product-facing compatibility layer, but its generic cloud-provider construction has moved behind AICoreKit's reusable configuration boundary.
 
-- FateAtlas main `ac795e3e` pins AICoreKit `590a67a4` through `Packages/AppAIKit`.
-- The AppAIKit compatibility layer preserves FateAtlas's existing public API, provider settings, and product-facing error/status semantics.
-- OpenAI-compatible chat and streaming now delegate to AICoreKit's `AIProviderOpenAICompatible`. This includes the DeepSeek/custom endpoint path.
-- Anthropic chat and streaming now delegate to `AIProviderAnthropic`.
-- The migrated paths no longer keep a second URLSession/SSE implementation inside AppAIKit.
-- AppAIKit package tests pass.
-- A code-signing-disabled **Release** generic iOS build of the full FateAtlas app passes with the AICoreKit-backed providers linked into the production target.
+Current cloud-provider state:
 
-Phase 3 has now started for structured generation:
+- AppAIKit depends directly on `AICore` and `AIProviderConfiguration`; it no longer needs direct target dependencies on the OpenAI, Anthropic, or OpenAI-compatible provider modules;
+- `OpenAIResponsesProvider`, `AnthropicProvider`, and `OpenAICompatibleProvider` preserve their existing FateAtlas-facing APIs while internally building `AIProviderProfile` values and delegating provider construction to `AIConfiguredProviderFactory`;
+- profile construction preserves FateAtlas's existing endpoint, model, provider identity, timeout, maximum-output-token, and temperature semantics;
+- first-party OpenAI generation and connection testing now both execute through the Responses API path;
+- Anthropic generation/connection testing execute through the same AICoreKit Anthropic path;
+- DeepSeek/custom OpenAI-compatible generation/connection testing execute through the same compatible provider path;
+- duplicate URLSession/header implementations previously used only by connection testing have been removed;
+- product-owned model discovery remains intentionally separate: the OpenAI-compatible `/models` helper is still a FateAtlas feature because model-list UX and endpoint compatibility policy are not a generic generation contract.
 
-- FateAtlas main `03b428cb` keeps `StructuredOutputSchema` product-facing and vendor-neutral inside AppAIKit, then converts it internally to AICoreKit `AIStructuredOutputSchema`.
-- Zodiac, astrology, and BaZi enhancement payloads now provide explicit schemas and use AICoreKit's native Anthropic structured-output adapter when the selected remote protocol is Anthropic.
-- The three payload DTOs are explicitly `nonisolated` because the FateAtlas app target uses MainActor default isolation while AICoreKit correctly requires structured outputs to be `Decodable & Sendable`.
-- AppAIKit tests and the full code-signing-disabled Release generic iOS build both pass after this change.
-- FateAtlas main `cc357684` separates first-party OpenAI from the compatibility bucket. OpenAI chat/streaming now uses AICoreKit `AIProviderOpenAI` and the Responses API, while schema-backed enhancement requests use that provider's native structured generation with `store=false`.
-- DeepSeek/custom structured generation intentionally keeps the validated prompt/JSON fallback through `AIProviderOpenAICompatible`; AICoreKit does not advertise a schema capability for a generic compatible endpoint.
-- Apple local structured generation also remains the existing product fallback until a reusable native contract is justified.
+Structured generation remains intentionally split by actual provider capability:
 
-The migration is intentionally incomplete:
+- OpenAI Responses and Anthropic use AICoreKit native schema-backed structured generation when an explicit schema is supplied;
+- DeepSeek/custom compatible services retain FateAtlas's validated prompt/JSON fallback because generic compatible endpoints do not share one guaranteed schema extension;
+- Apple local structured generation remains product-owned until a reusable native Apple structured-output contract is justified.
 
-- `fetchModels()` and connection testing remain product-owned;
-- model-list and connection-test UX still use product-owned compatibility helpers even though OpenAI generation itself now uses Responses;
-- Apple local execution and the broader orchestration layer have not yet been collapsed into AICoreKit;
-- `Packages/AppAIKit` remains as a compatibility/product adapter layer and should not be deleted yet.
+FateAtlas still owns provider selection UI, stored settings, model-list presentation, connection-test presentation/status text, task routing, fallback labels, and astrology/BaZi/zodiac domain validation. AICoreKit owns the technical provider protocol construction underneath those product decisions.
 
-This is sufficient to validate FateAtlas as a production consumer for the migrated cloud chat/streaming path, but not sufficient to declare the entire AppAIKit migration complete.
+The broader AppAIKit migration remains incremental. No new Release/CI evidence is claimed by this documentation update; previously established production evidence remains historical evidence rather than a claim about the latest commit.
 
 ## Why FateAtlas matters to AICoreKit 1.0
 
