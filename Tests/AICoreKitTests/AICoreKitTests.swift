@@ -3960,3 +3960,97 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+extension AICoreKitTests {
+    func testCoreAILifecycleStateChangesReachMultipleSubscribers() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: true
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        let preparedState =
+            await controller.currentState()
+        XCTAssertEqual(
+            preparedState,
+            .prepared
+        )
+
+        let firstStream =
+            await controller.stateChanges()
+        let secondStream =
+            await controller.stateChanges()
+
+        let bootstrapped =
+            try await controller
+                .bootstrapIfPrepared()
+        XCTAssertTrue(bootstrapped)
+
+        var firstIterator =
+            firstStream.makeAsyncIterator()
+        var secondIterator =
+            secondStream.makeAsyncIterator()
+
+        var firstStates:
+            [CoreAIModelLifecycleState] = []
+        var secondStates:
+            [CoreAIModelLifecycleState] = []
+
+        for _ in 0..<3 {
+            if let first =
+                await firstIterator.next()
+            {
+                firstStates.append(first)
+            }
+
+            if let second =
+                await secondIterator.next()
+            {
+                secondStates.append(second)
+            }
+        }
+
+        XCTAssertEqual(
+            firstStates,
+            [
+                .prepared,
+                .loading,
+                .ready
+            ]
+        )
+        XCTAssertEqual(
+            secondStates,
+            firstStates
+        )
+    }
+}

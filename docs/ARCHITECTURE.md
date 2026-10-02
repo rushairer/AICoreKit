@@ -99,3 +99,10 @@ Provider instances share one lifecycle controller internally, and that actor coa
 
 
 Lifecycle reset and cache-clear operations invalidate the current readiness generation before touching the runtime. A late native callback from a cancelled prepare/load is therefore stale and cannot transition the controller back to `ready`. Cache clearing additionally waits for the invalidated readiness task to settle before the final persistent-cache removal, covering bridges whose native preparation cannot be cancelled synchronously.
+
+
+### Lifecycle observation
+
+`CoreAIModelLifecycleController.stateChanges(includeCurrentState:)` exposes a multi-subscriber `AsyncStream` of product-neutral lifecycle states. It emits only real state transitions and can optionally begin with the current state.
+
+Consumer UI should map this stream into product wording and actions instead of maintaining a second prepare/load/ready state machine. Request-execution stages such as model warming, text generation, and product-side validation remain separate from model lifecycle state.

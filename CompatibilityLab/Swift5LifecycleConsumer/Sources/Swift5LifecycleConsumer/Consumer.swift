@@ -113,6 +113,7 @@ private struct Swift5LifecycleConsumer {
             )
 
         _ = await controller.currentState()
+        _ = await controller.stateChanges()
         _ = await controller
             .isPersistentlyPrepared()
 

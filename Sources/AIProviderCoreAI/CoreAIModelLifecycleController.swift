@@ -24,6 +24,14 @@ public actor CoreAIModelLifecycleController {
 
     private var state:
         CoreAIModelLifecycleState = .notPrepared
+    private var stateObservers:
+        [UInt64:
+            AsyncStream<
+                CoreAIModelLifecycleState
+            >.Continuation] = [:]
+    private var nextStateObserverID:
+        UInt64 = 0
+
     private var readinessTask:
         Task<Void, Error>?
     private var readinessGeneration:
@@ -45,6 +53,47 @@ public actor CoreAIModelLifecycleController {
         async -> CoreAIModelLifecycleState
     {
         await refreshState()
+    }
+
+    public func stateChanges(
+        includeCurrentState: Bool = true
+    ) -> AsyncStream<
+        CoreAIModelLifecycleState
+    > {
+        let observerID =
+            nextStateObserverID
+        nextStateObserverID &+= 1
+
+        let pair =
+            AsyncStream<
+                CoreAIModelLifecycleState
+            >
+            .makeStream(
+                bufferingPolicy:
+                    .bufferingNewest(16)
+            )
+
+        stateObservers[observerID] =
+            pair.continuation
+
+        if includeCurrentState {
+            pair.continuation.yield(
+                state
+            )
+        }
+
+        pair.continuation.onTermination = {
+            [weak self] _ in
+
+            Task {
+                await self?
+                    .removeStateObserver(
+                        observerID
+                    )
+            }
+        }
+
+        return pair.stream
     }
 
     public func isPersistentlyPrepared()
@@ -84,7 +133,7 @@ public actor CoreAIModelLifecycleController {
         guard
             await bridge.availability() == .available
         else {
-            state = .unavailable
+            transition(to: .unavailable)
             return state
         }
 
@@ -93,16 +142,20 @@ public actor CoreAIModelLifecycleController {
                 try? await resourceProvider.modelResource(),
             resource.exists
         else {
-            state = .missingModel
+            transition(to: .missingModel)
             return state
         }
 
-        state =
+        let refreshedState:
+            CoreAIModelLifecycleState =
             await bridge.isPrepared(
                 modelPath: resource.path
             )
             ? .prepared
             : .notPrepared
+        transition(
+            to: refreshedState
+        )
 
         return state
     }
@@ -116,13 +169,13 @@ public actor CoreAIModelLifecycleController {
         if await bridge.isPrepared(
             modelPath: resource.path
         ) {
-            state = .prepared
+            transition(to: .prepared)
             return
         }
 
         generation &+= 1
         let operationGeneration = generation
-        state = .preparing
+        transition(to: .preparing)
 
         let status = await bridge.prepare(
             modelPath: resource.path
@@ -137,9 +190,9 @@ public actor CoreAIModelLifecycleController {
                 status,
                 operation: "prepare"
             )
-            state = .prepared
+            transition(to: .prepared)
         } catch {
-            state = .failed
+            transition(to: .failed)
             throw error
         }
     }
@@ -157,7 +210,7 @@ public actor CoreAIModelLifecycleController {
         guard await bridge.isPrepared(
             modelPath: resource.path
         ) else {
-            state = .notPrepared
+            transition(to: .notPrepared)
             throw AIError.unavailable(
                 .modelNotReady
             )
@@ -165,7 +218,7 @@ public actor CoreAIModelLifecycleController {
 
         generation &+= 1
         let operationGeneration = generation
-        state = .loading
+        transition(to: .loading)
 
         let status = await bridge.load(
             modelPath: resource.path
@@ -180,9 +233,9 @@ public actor CoreAIModelLifecycleController {
                 status,
                 operation: "load"
             )
-            state = .ready
+            transition(to: .ready)
         } catch {
-            state = .failed
+            transition(to: .failed)
             throw error
         }
     }
@@ -242,7 +295,7 @@ public actor CoreAIModelLifecycleController {
         guard await bridge.isPrepared(
             modelPath: resource.path
         ) else {
-            state = .notPrepared
+            transition(to: .notPrepared)
             return false
         }
 
@@ -283,7 +336,7 @@ public actor CoreAIModelLifecycleController {
             let resource =
                 try await resourceProvider.modelResource()
         else {
-            state = .missingModel
+            transition(to: .missingModel)
             return
         }
 
@@ -309,12 +362,16 @@ public actor CoreAIModelLifecycleController {
             )
         }
 
-        state =
+        let postUnloadState:
+            CoreAIModelLifecycleState =
             await bridge.isPrepared(
                 modelPath: resource.path
             )
             ? .prepared
             : .notPrepared
+        transition(
+            to: postUnloadState
+        )
     }
 
     public func clearPreparationCache()
@@ -353,9 +410,9 @@ public actor CoreAIModelLifecycleController {
                 operation:
                     "clear preparation cache"
             )
-            state = .notPrepared
+            transition(to: .notPrepared)
         } catch {
-            state = .failed
+            transition(to: .failed)
             throw error
         }
     }
@@ -384,7 +441,7 @@ public actor CoreAIModelLifecycleController {
         )
 
         if !prepared {
-            state = .preparing
+            transition(to: .preparing)
 
             let prepareStatus =
                 await bridge.prepare(
@@ -416,7 +473,7 @@ public actor CoreAIModelLifecycleController {
             expectedGeneration
         )
 
-        state = .loading
+        transition(to: .loading)
 
         let loadStatus =
             await bridge.load(
@@ -432,9 +489,9 @@ public actor CoreAIModelLifecycleController {
                 loadStatus,
                 operation: "load"
             )
-            state = .ready
+            transition(to: .ready)
         } catch {
-            state = .failed
+            transition(to: .failed)
             throw error
         }
     }
@@ -485,13 +542,40 @@ public actor CoreAIModelLifecycleController {
         readinessGeneration = nil
     }
 
+    private func transition(
+        to newState:
+            CoreAIModelLifecycleState
+    ) {
+        guard state != newState else {
+            return
+        }
+
+        state = newState
+
+        for continuation
+            in stateObservers.values
+        {
+            continuation.yield(
+                newState
+            )
+        }
+    }
+
+    private func removeStateObserver(
+        _ observerID: UInt64
+    ) {
+        stateObservers.removeValue(
+            forKey: observerID
+        )
+    }
+
     private func requiredResource()
         async throws -> CoreAIModelResource
     {
         guard
             await bridge.availability() == .available
         else {
-            state = .unavailable
+            transition(to: .unavailable)
             throw AIError.unavailable(
                 .frameworkUnavailable
             )
@@ -502,7 +586,7 @@ public actor CoreAIModelLifecycleController {
                 try await resourceProvider.modelResource(),
             resource.exists
         else {
-            state = .missingModel
+            transition(to: .missingModel)
             throw AIError.unavailable(
                 .modelMissing
             )
