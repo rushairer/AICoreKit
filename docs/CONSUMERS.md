@@ -8,7 +8,7 @@ The target is three production consumers with deliberately different workloads.
 
 | Product | Current state | Intended AICoreKit role | Main validation |
 | --- | --- | --- | --- |
-| ColorCamera | Existing Apple Foundation Models + product-specific Core AI/Qwen implementation | Gradual migration of reusable provider/runtime infrastructure | iOS 26 host / iOS 27 local runtime, weak link, resource lifecycle, local fallback |
+| ColorCamera | AICoreKit is now a real app dependency; local-model lifecycle is routed through `CoreAIModelLifecycleController`, while product-specific generation remains in `ColorCameraCoreAI`; Xcode Cloud/archive validation pending | Gradual migration of reusable provider/runtime infrastructure | iOS 26 host / iOS 27 local runtime, weak link, resource lifecycle, local fallback |
 | FateAtlas | Existing internal `AppAIKit` with Apple/cloud providers | Replace duplicated generic AI package with AICoreKit | cloud providers, user-selected endpoints, structured generation, streaming/fallback |
 | MetronomePro | AICoreKit pinned in PracticeFeature; on-demand AI Practice Coach path implemented on main, build/archive verification pending | New AI Practice Coach and natural-language actions | evidence-grounded generation, tool calling, local/cloud routing |
 
@@ -36,6 +36,14 @@ Recommended validation scope:
 - deterministic palette validation retained outside AICoreKit.
 
 ColorCamera should not be forced to remove its product-specific `@Generable` Apple adapter until equivalent behavior exists through a reusable contract.
+
+Current adoption evidence as of 2026-10-02:
+
+- ColorCamera main `75fa6fb7` pins AICoreKit revision `4daad5e5` and links the host-safe `AICore` + `AIProviderCoreAI` products into the iOS 26 app target.
+- The existing `CoreAIModelPrewarmer` is now a product facade over AICoreKit's `CoreAIModelLifecycleController`; persistent preparation inspection, launch-safe bootstrap, shared readiness, runtime unload, and preparation-cache clearing are coordinated by AICoreKit.
+- The iOS 27 `ColorCameraCoreAI` framework remains product-specific for palette generation and repair. The migration intentionally does not import AICoreKit's higher-minimum runtime into the iOS 26 host.
+- ColorCamera's release gate now checks the immutable AICoreKit revision in both the Xcode project and committed `Package.resolved`.
+- Xcode Cloud validation for the first lifecycle migration commit is pending. Until build/archive and signed-device behavior succeed, ColorCamera does **not** count as a completed production consumer.
 
 See `MIGRATION_COLORCAMERA.md`.
 
