@@ -206,10 +206,10 @@ Execution-policy status:
 
 - ColorCamera now exposes an explicit product-owned execution mode: **Automatic**, **On-device**, or **Cloud**.
 - Automatic preserves the ordered local-first behavior and only continues to an enabled/configured cloud provider when the local path cannot return a valid result.
-- On-device excludes cloud providers entirely.
+- On-device excludes cloud providers from Color Intelligence analysis; an explicit Settings connection test remains a separate user action.
 - Cloud excludes Apple/Core AI providers, skips launch-time local-model bootstrap, and unloads current Core AI residency when selected without clearing persistent preparation.
 - This policy remains in ColorCamera rather than AICoreKit because it is user-facing product preference; AICoreKit supplies provider/lifecycle mechanisms, not the product's settings semantics.
-- Qwen model identity/resource/display metadata and lifecycle presentation are centralized in ColorCamera's shared local-model settings layer so Settings, first-use initialization, and launch bootstrap do not each own a lifecycle façade.
+- AICoreKit now provides `CoreAIModelProfile` for reusable model identifier/display/source metadata. ColorCamera centralizes its Qwen profile instance, product bundle resource name, and lifecycle presentation in its shared local-model settings layer so Settings, first-use initialization, and launch bootstrap do not each own a lifecycle façade.
 
 Cloud-provider status:
 
