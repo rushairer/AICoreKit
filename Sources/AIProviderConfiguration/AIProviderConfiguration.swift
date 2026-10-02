@@ -227,6 +227,139 @@ public struct AIProviderProfile:
         self.defaultTemperature =
             defaultTemperature
     }
+
+    private enum CodingKeys:
+        String,
+        CodingKey
+    {
+        case id
+        case kind
+        case providerID
+        case displayName
+        case model
+        case baseURL
+        case credentialKind
+        case timeout
+        case defaultMaxOutputTokens
+        case defaultTemperature
+    }
+
+    public init(
+        from decoder: Decoder
+    ) throws {
+        let container =
+            try decoder.container(
+                keyedBy:
+                    CodingKeys.self
+            )
+
+        id =
+            try container.decode(
+                String.self,
+                forKey: .id
+            )
+        kind =
+            try container.decode(
+                AIProviderProfileKind.self,
+                forKey: .kind
+            )
+        providerID =
+            try container.decode(
+                AIProviderID.self,
+                forKey: .providerID
+            )
+        displayName =
+            try container.decode(
+                String.self,
+                forKey: .displayName
+            )
+        model =
+            try container.decode(
+                String.self,
+                forKey: .model
+            )
+        baseURL =
+            try container.decode(
+                URL.self,
+                forKey: .baseURL
+            )
+        credentialKind =
+            try container.decode(
+                AICredentialKind.self,
+                forKey: .credentialKind
+            )
+        timeout =
+            try container.decodeIfPresent(
+                TimeInterval.self,
+                forKey: .timeout
+            )
+            ?? 60
+        defaultMaxOutputTokens =
+            try container.decodeIfPresent(
+                Int.self,
+                forKey:
+                    .defaultMaxOutputTokens
+            )
+        defaultTemperature =
+            try container.decodeIfPresent(
+                Double.self,
+                forKey:
+                    .defaultTemperature
+            )
+    }
+
+    public func encode(
+        to encoder: Encoder
+    ) throws {
+        var container =
+            encoder.container(
+                keyedBy:
+                    CodingKeys.self
+            )
+
+        try container.encode(
+            id,
+            forKey: .id
+        )
+        try container.encode(
+            kind,
+            forKey: .kind
+        )
+        try container.encode(
+            providerID,
+            forKey: .providerID
+        )
+        try container.encode(
+            displayName,
+            forKey: .displayName
+        )
+        try container.encode(
+            model,
+            forKey: .model
+        )
+        try container.encode(
+            baseURL,
+            forKey: .baseURL
+        )
+        try container.encode(
+            credentialKind,
+            forKey: .credentialKind
+        )
+        try container.encode(
+            timeout,
+            forKey: .timeout
+        )
+        try container.encodeIfPresent(
+            defaultMaxOutputTokens,
+            forKey:
+                .defaultMaxOutputTokens
+        )
+        try container.encodeIfPresent(
+            defaultTemperature,
+            forKey:
+                .defaultTemperature
+        )
+    }
 }
 
 public extension AIProviderProfile {
