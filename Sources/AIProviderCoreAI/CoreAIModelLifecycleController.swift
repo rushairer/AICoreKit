@@ -26,6 +26,8 @@ public actor CoreAIModelLifecycleController {
         CoreAIModelLifecycleState = .notPrepared
     private var readinessTask:
         Task<Void, Error>?
+    private var readinessGeneration:
+        UInt64?
     private var generation: UInt64 = 0
 
     public init(
@@ -194,20 +196,29 @@ public actor CoreAIModelLifecycleController {
             return try await readinessTask.value
         }
 
+        let operationGeneration =
+            generation
         let task = Task {
-            try await self.performEnsureReady()
+            try await self.performEnsureReady(
+                expectedGeneration:
+                    operationGeneration
+            )
         }
         readinessTask = task
+        readinessGeneration =
+            operationGeneration
 
         do {
             try await task.value
-            if readinessTask != nil {
-                readinessTask = nil
-            }
+            clearReadinessTask(
+                ifGeneration:
+                    operationGeneration
+            )
         } catch {
-            if readinessTask != nil {
-                readinessTask = nil
-            }
+            clearReadinessTask(
+                ifGeneration:
+                    operationGeneration
+            )
             throw error
         }
     }
@@ -235,27 +246,38 @@ public actor CoreAIModelLifecycleController {
             return false
         }
 
+        let operationGeneration =
+            generation
         let task = Task {
             try await self.performLoadPrepared(
-                resource: resource
+                resource: resource,
+                expectedGeneration:
+                    operationGeneration
             )
         }
         readinessTask = task
+        readinessGeneration =
+            operationGeneration
 
         do {
             try await task.value
-            readinessTask = nil
+            clearReadinessTask(
+                ifGeneration:
+                    operationGeneration
+            )
             return true
         } catch {
-            readinessTask = nil
+            clearReadinessTask(
+                ifGeneration:
+                    operationGeneration
+            )
             throw error
         }
     }
 
     public func unload() async throws {
-        generation &+= 1
-        readinessTask?.cancel()
-        readinessTask = nil
+        let pendingTask =
+            invalidateReadinessTask()
 
         guard
             let resource =
@@ -265,13 +287,27 @@ public actor CoreAIModelLifecycleController {
             return
         }
 
-        let status = await bridge.unload(
-            modelPath: resource.path
-        )
+        let initialStatus =
+            await bridge.unload(
+                modelPath: resource.path
+            )
         try validate(
-            status,
+            initialStatus,
             operation: "unload"
         )
+
+        if let pendingTask {
+            _ = try? await pendingTask.value
+
+            let finalStatus =
+                await bridge.unload(
+                    modelPath: resource.path
+                )
+            try validate(
+                finalStatus,
+                operation: "unload"
+            )
+        }
 
         state =
             await bridge.isPrepared(
@@ -284,12 +320,27 @@ public actor CoreAIModelLifecycleController {
     public func clearPreparationCache()
         async throws
     {
-        generation &+= 1
-        readinessTask?.cancel()
-        readinessTask = nil
+        let pendingTask =
+            invalidateReadinessTask()
 
         let resource =
             try await requiredResource()
+
+        // Ask the runtime to cancel resident or in-flight work first.
+        // Some bridges cannot synchronously abort preparation, so wait for
+        // the invalidated operation to settle before the final cache clear.
+        let unloadStatus =
+            await bridge.unload(
+                modelPath: resource.path
+            )
+        try validate(
+            unloadStatus,
+            operation: "unload"
+        )
+
+        if let pendingTask {
+            _ = try? await pendingTask.value
+        }
 
         let status =
             await bridge.clearPreparationCache(
@@ -309,15 +360,28 @@ public actor CoreAIModelLifecycleController {
         }
     }
 
-    private func performEnsureReady()
-        async throws
-    {
+    private func performEnsureReady(
+        expectedGeneration: UInt64
+    ) async throws {
+        try ensureCurrent(
+            expectedGeneration
+        )
+
         let resource =
             try await requiredResource()
+
+        try ensureCurrent(
+            expectedGeneration
+        )
+
         let prepared =
             await bridge.isPrepared(
                 modelPath: resource.path
             )
+
+        try ensureCurrent(
+            expectedGeneration
+        )
 
         if !prepared {
             state = .preparing
@@ -326,6 +390,11 @@ public actor CoreAIModelLifecycleController {
                 await bridge.prepare(
                     modelPath: resource.path
                 )
+
+            try ensureCurrent(
+                expectedGeneration
+            )
+
             try validate(
                 prepareStatus,
                 operation: "prepare"
@@ -333,19 +402,30 @@ public actor CoreAIModelLifecycleController {
         }
 
         try await performLoadPrepared(
-            resource: resource
+            resource: resource,
+            expectedGeneration:
+                expectedGeneration
         )
     }
 
     private func performLoadPrepared(
-        resource: CoreAIModelResource
+        resource: CoreAIModelResource,
+        expectedGeneration: UInt64
     ) async throws {
+        try ensureCurrent(
+            expectedGeneration
+        )
+
         state = .loading
 
         let loadStatus =
             await bridge.load(
                 modelPath: resource.path
             )
+
+        try ensureCurrent(
+            expectedGeneration
+        )
 
         do {
             try validate(
@@ -357,6 +437,52 @@ public actor CoreAIModelLifecycleController {
             state = .failed
             throw error
         }
+    }
+
+    private func ensureCurrent(
+        _ expectedGeneration: UInt64
+    ) throws {
+        guard
+            expectedGeneration == generation
+        else {
+            throw AIError.cancelled
+        }
+
+        do {
+            try Task.checkCancellation()
+        } catch {
+            throw AIError.cancelled
+        }
+    }
+
+    @discardableResult
+    private func invalidateReadinessTask()
+        -> Task<Void, Error>?
+    {
+        generation &+= 1
+
+        let pendingTask =
+            readinessTask
+        readinessTask?.cancel()
+        readinessTask = nil
+        readinessGeneration = nil
+
+        return pendingTask
+    }
+
+    private func clearReadinessTask(
+        ifGeneration operationGeneration:
+            UInt64
+    ) {
+        guard
+            readinessGeneration
+                == operationGeneration
+        else {
+            return
+        }
+
+        readinessTask = nil
+        readinessGeneration = nil
     }
 
     private func requiredResource()

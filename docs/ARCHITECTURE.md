@@ -96,3 +96,6 @@ ready
 `releaseResources()` unloads only current-process residency. `clearPreparationCache()` unloads first and then removes persistent specialization while leaving installed model files untouched.
 
 Provider instances share one lifecycle controller internally, and that actor coalesces concurrent prepare/load requests into a single in-flight readiness task. The iOS 27 runtime independently coalesces Core AI preparation and model loading as a second safety boundary.
+
+
+Lifecycle reset and cache-clear operations invalidate the current readiness generation before touching the runtime. A late native callback from a cancelled prepare/load is therefore stale and cannot transition the controller back to `ready`. Cache clearing additionally waits for the invalidated readiness task to settle before the final persistent-cache removal, covering bridges whose native preparation cannot be cancelled synchronously.

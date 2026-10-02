@@ -3790,3 +3790,173 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+private actor SlowNonCancellingCoreAILifecycleBridge:
+    CoreAIModelLifecycleBridge
+{
+    private var prepared = false
+    private(set) var prepareCount = 0
+    private(set) var loadCount = 0
+    private(set) var unloadCount = 0
+    private(set) var clearCount = 0
+
+    func availability() async -> AIAvailability {
+        .available
+    }
+
+    func generate(
+        requestJSON: String,
+        modelPath: String
+    ) async -> CoreAIBridgeInvocation {
+        CoreAIBridgeInvocation(
+            status: .unavailable
+        )
+    }
+
+    func isPrepared(
+        modelPath: String
+    ) async -> Bool {
+        prepared
+    }
+
+    func prepare(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        prepareCount += 1
+
+        // Intentionally ignore cancellation to model a bridge operation
+        // whose native callback arrives after reset was requested.
+        try? await Task.sleep(
+            nanoseconds: 80_000_000
+        )
+
+        prepared = true
+        return .success
+    }
+
+    func load(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        loadCount += 1
+        return .success
+    }
+
+    func unload(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        unloadCount += 1
+        return .success
+    }
+
+    func clearPreparationCache(
+        modelPath: String
+    ) async -> CoreAIBridgeStatus {
+        clearCount += 1
+        prepared = false
+        return .success
+    }
+
+    func snapshot()
+        -> (
+            prepared: Bool,
+            prepare: Int,
+            load: Int,
+            unload: Int,
+            clear: Int
+        )
+    {
+        (
+            prepared,
+            prepareCount,
+            loadCount,
+            unloadCount,
+            clearCount
+        )
+    }
+}
+
+extension AICoreKitTests {
+    func testCoreAIClearInvalidatesLatePreparationCompletion() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            SlowNonCancellingCoreAILifecycleBridge()
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        let readiness = Task {
+            try await controller.ensureReady()
+        }
+
+        try await Task.sleep(
+            nanoseconds: 10_000_000
+        )
+
+        try await controller
+            .clearPreparationCache()
+
+        do {
+            try await readiness.value
+            XCTFail(
+                "Expected invalidated readiness to be cancelled"
+            )
+        } catch let error as AIError {
+            XCTAssertEqual(
+                error,
+                .cancelled
+            )
+        }
+
+        let lifecycleState =
+            await controller.currentState()
+        XCTAssertEqual(
+            lifecycleState,
+            .notPrepared
+        )
+
+        let snapshot =
+            await bridge.snapshot()
+        XCTAssertFalse(
+            snapshot.prepared
+        )
+        XCTAssertEqual(
+            snapshot.prepare,
+            1
+        )
+        XCTAssertEqual(
+            snapshot.load,
+            0
+        )
+        XCTAssertEqual(
+            snapshot.clear,
+            1
+        )
+    }
+}
