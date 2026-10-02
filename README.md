@@ -28,6 +28,7 @@ It is designed around capabilities rather than vendors, so product code can use 
 - `AIProviderAnthropic` — optional Anthropic Messages API provider with text, SSE streaming, native structured generation, normalized tool calls, and multi-turn tool continuation.
 - `AIProviderGemini` — optional Gemini provider using Generate Content for text/streaming and Interactions for native structured generation, normalized tool calls, and multi-turn tool continuation.
 - `AIProviderOpenAI` — optional OpenAI Responses API provider with text, SSE streaming, native structured generation, normalized tool calls, and multi-turn tool continuation.
+- `AIProviderConfiguration` — reusable cloud-provider profiles, built-in OpenAI/Anthropic/Gemini/DeepSeek/custom presets, validation, provider construction, and explicit connection probes. Products still own settings UI and credential persistence.
 - `AICoreKit` — convenience umbrella module.
 
 Cloud provider foundations now cover OpenAI-compatible, Anthropic, Gemini, and the OpenAI Responses API. OpenAI Responses, Anthropic, and Gemini also share provider-native structured output, normalized tool calls, stateless multi-turn tool continuation, and application-owned confirmation policies.
