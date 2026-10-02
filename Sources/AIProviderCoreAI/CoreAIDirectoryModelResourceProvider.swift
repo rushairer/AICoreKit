@@ -9,6 +9,21 @@ public struct CoreAIDirectoryModelResourceProvider:
     public let requiredFileExtension: String?
 
     public init(
+        profile: CoreAIModelProfile,
+        directoryURL: URL?,
+        requiredFileExtension: String? = "aimodel"
+    ) {
+        self.init(
+            identifier:
+                profile.identifier,
+            directoryURL:
+                directoryURL,
+            requiredFileExtension:
+                requiredFileExtension
+        )
+    }
+
+    public init(
         identifier: String,
         directoryURL: URL?,
         requiredFileExtension: String? = "aimodel"
