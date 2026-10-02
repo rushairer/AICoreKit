@@ -16,13 +16,13 @@ ColorCamera proved the following packaging boundary with Xcode 27:
 
 The production AICoreKit Core AI provider should generalize this boundary without importing ColorCamera product types, prompts, or palette schemas.
 
-Before 0.2, the compatibility lab must cover:
+Compatibility status:
 
-1. iOS 26 real-device launch with the weak framework absent/unavailable.
-2. iOS 27 real-device bridge availability.
-3. Release archive and distribution validation.
-4. Model load and inference after the ABI boundary is proven.
-5. Cancellation, repeated model load, and memory-pressure behavior.
+1. iOS 26 real-device launch with the weak framework absent/unavailable — pending signed-device validation.
+2. iOS 27 real-device bridge availability — previously demonstrated by ColorCamera; product-neutral signed-device validation remains pending.
+3. Xcode 27 Release archive topology — validated by `ArchiveFixture`; signed/App Store distribution remains pending.
+4. Model load and inference after the ABI boundary is proven — pending product-neutral signed-device validation.
+5. Cancellation, repeated model load, and memory-pressure behavior — lifecycle cancellation is covered in package tests; device memory/thermal validation remains pending.
 
 
 ## Lower-minimum app archive fixture
@@ -35,5 +35,7 @@ CI archives the fixture with Xcode 27 and verifies:
 - the embedded runtime bundle and Mach-O declare iOS 27;
 - the application records `LC_LOAD_WEAK_DYLIB` for the runtime;
 - the weak Core AI C ABI reference survives Release archiving.
+
+CI evidence at revision `d437932d` confirms that Xcode 27 archives this topology successfully: the archived app declares iOS 26.0, the embedded runtime declares iOS 27.0, and both the weak load command and weak ABI reference survive Release archiving.
 
 This is a packaging/Archive compatibility test. App Store Connect distribution validation and signed physical-device execution remain separate release gates.

@@ -85,6 +85,19 @@ Do not treat the flag alone as proof. Release validation must inspect the final 
 
 This checks the linker boundary independently from any product application.
 
+## Automated app archive fixture
+
+`CompatibilityLab/ArchiveFixture` is a minimal iOS application with a 26.0 deployment target. The Xcode project weak-links and embeds the prebuilt iOS 27 runtime using normal Frameworks and Embed Frameworks build phases.
+
+`Scripts/build-verify-coreai-archive-fixture.sh` runs an unsigned Xcode 27 Release archive and verifies the archived product itself:
+
+- application `Info.plist` and Mach-O minimum OS are iOS 26.0;
+- embedded runtime `Info.plist` and Mach-O minimum OS are iOS 27.0;
+- the application contains `LC_LOAD_WEAK_DYLIB` for the runtime;
+- the weak `AICKCoreAIIsAvailable` reference survives Release archiving.
+
+CI revision `d437932d` passes this fixture. Therefore the lower-minimum host / higher-minimum weak runtime topology is accepted by Xcode 27 archiving. This evidence does not claim App Store Connect acceptance because the fixture is intentionally unsigned.
+
 ## Release validation
 
 Before declaring the compatibility boundary production-ready, a real host application build must additionally prove:
@@ -92,6 +105,7 @@ Before declaring the compatibility boundary production-ready, a real host applic
 - the runtime framework is embedded and code signed;
 - the final app launches successfully on the lower supported OS when the runtime cannot load;
 - the lifecycle and generation C ABI symbols resolve and inference succeeds on iOS 27+;
-- Release/archive behavior matches Debug compatibility behavior.
+- Release/archive behavior matches Debug compatibility behavior (the unsigned product-neutral Archive fixture now proves this Xcode-level boundary);
+- signed distribution/App Store Connect validation accepts the final embedded runtime topology.
 
 ColorCamera previously demonstrated this topology. AICoreKit's Compatibility Lab extracts those checks into product-neutral validation.
