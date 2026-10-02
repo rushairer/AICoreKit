@@ -8,9 +8,9 @@ The target is three production consumers with deliberately different workloads.
 
 | Product | Current state | Intended AICoreKit role | Main validation |
 | --- | --- | --- | --- |
-| ColorCamera | AICoreKit is a real app dependency; lifecycle is routed through `CoreAIModelLifecycleController`; product `ColorCameraCoreAI` now exposes one-to-one Prepare/Load/Reset/Clear semantics and passes Xcode 27 Release archive + iOS 26 weak-host validation; full signed app/distribution validation remains open | Gradual migration of reusable provider/runtime infrastructure | iOS 26 host / iOS 27 local runtime, weak link, resource lifecycle, local fallback |
-| FateAtlas | Production cloud chat/streaming paths now delegate to AICoreKit; AppAIKit remains the product-facing compatibility layer; package tests and a Release generic iOS app build pass | Replace duplicated generic transport/provider runtime incrementally | cloud providers, user-selected endpoints, structured generation, streaming/fallback |
-| MetronomePro | User-visible Practice Coach now routes through a dedicated `PracticeCoachAI` package pinned to AICoreKit; module Release build and contract tests pass; full app Release validation remains blocked by private dependency CI credentials | New AI Practice Coach and natural-language actions | evidence-grounded generation, tool calling, local/cloud routing |
+| ColorCamera | Pins AICoreKit `f6660787`; local Core AI lifecycle uses reset-safe serialized readiness; optional cloud palette fallback uses `AIProviderConfiguration` with Keychain credentials | Shared local lifecycle + reusable cloud-provider infrastructure while palette semantics remain product-owned | iOS 26 host / iOS 27 local runtime, weak link, first-use preparation vs fast load, cloud descriptor-only fallback |
+| FateAtlas | Pins AICoreKit `f6660787`; AppAIKit keeps the product API while provider construction, chat/streaming, structured cloud paths, and connection-test protocol execution delegate to AICoreKit | Incrementally remove duplicated generic provider/runtime plumbing without leaking vendor details into product UI | OpenAI Responses, Anthropic, DeepSeek/custom compatible endpoints, structured generation, streaming/fallback |
+| MetronomePro | Pins AICoreKit `f6660787`; Practice Coach is Apple-local-first with optional user-configured cloud fallback through `AIProviderConfiguration` and Keychain | Evidence-grounded Practice Coach with reusable local/cloud routing | deterministic evidence boundary, local-first fallback, shared settings across MetronomePro/Metronome26 |
 
 ## What counts as a production consumer
 
@@ -32,25 +32,20 @@ Recommended validation scope:
 - lower-minimum host launch;
 - iOS 27 real local inference;
 - model prepare/load/release/reset parity;
-- local/system fallback;
+- Apple/local/cloud fallback;
 - deterministic palette validation retained outside AICoreKit.
 
 ColorCamera should not be forced to remove its product-specific `@Generable` Apple adapter until equivalent behavior exists through a reusable contract.
 
 Current adoption evidence as of 2026-10-02:
 
-- ColorCamera main `0457ac37` pins the validated AICoreKit baseline `398a10f9` and links only the host-safe `AICore` + `AIProviderCoreAI` products into the iOS 26 app target.
-- The existing `CoreAIModelPrewarmer` is now a product facade over AICoreKit's `CoreAIModelLifecycleController`; persistent preparation inspection, launch-safe bootstrap, shared readiness, runtime unload, preparation-cache clearing, and stale-completion invalidation are coordinated by AICoreKit.
-- The iOS 27 `ColorCameraCoreAI` framework remains product-specific for palette generation and repair. The migration intentionally does not import AICoreKit's higher-minimum runtime into the iOS 26 host.
-- ColorCamera main `294ca270` splits its product C ABI into `CCACoreAIPrepare` (persistent `PreparedModel.prepare`) and `CCACoreAILoad` (process-resident eager load); `CCACoreAIReset` unloads without clearing preparation, `CCACoreAIClearPreparationCache` removes persistent specialization, and legacy `CCACoreAIPrewarm` remains only as prepare-if-needed + load compatibility.
-- ColorCamera main `d9595df9` passes the Xcode 27 product Core AI **Release archive** after that runtime split. Main `be6c77e2` extends the fixture so the iOS 26 host directly references `CCACoreAIIsAvailable`, `CCACoreAIPrepare`, and `CCACoreAILoad`; all three references remain weak and the archive stays green.
-- AICoreKit CI now includes a Swift 5 language-mode lifecycle consumer fixture, matching ColorCamera's host language mode, and that fixture compiles successfully.
-- The Compatibility Lab now also archives a minimal iOS 26 application that weak-links and embeds the iOS 27 Core AI runtime. Xcode 27 Release archive succeeds with app `MinimumOSVersion = 26.0`, runtime `MinimumOSVersion = 27.0`, `LC_LOAD_WEAK_DYLIB`, and the weak C ABI reference intact. This proves the cross-version archive topology independently from ColorCamera; it does not replace ColorCamera's signed-device/App Store distribution gate.
-- ColorCamera's release gate checks the immutable AICoreKit revision in both the Xcode project and committed `Package.resolved`; the resolved-file origin hash was also updated for the new top-level dependency graph.
-- ColorCamera DEBUG device diagnostics now consume AICoreKit's persistent-preparation evidence (`preparedBeforeRun`, `preparedAfterPrepare`, `preparedAfterRelease`, and `coldPreparationPerformed`), so a warm preparation-cache hit cannot be mistaken for a first-use preparation measurement.
-- The copied diagnostic report is now self-describing: AICoreKit records hardware model, process architecture, and OS version, while ColorCamera adds application version/build, `Qwen/Qwen3-0.6B`, and the diagnostic feature identifier without collecting user identifiers.
-- ColorCamera Xcode Cloud was already failing on the pre-migration baseline `ca333dd1` and several earlier commits. The current Xcode Cloud failure therefore remains a separate historical CI/release issue rather than evidence that the AICoreKit lifecycle migration introduced a regression.
-- The product Core AI runtime/archive boundary is now validated, but a full ColorCamera production target Release/archive with signing/distribution evidence and signed-device iOS 26/iOS 27 validation are still required before ColorCamera counts as a completed production consumer.
+- ColorCamera pins AICoreKit `f6660787` in both the Xcode project and committed `Package.resolved`.
+- `CoreAIModelLifecycleController` now owns the reusable lifecycle: persistent preparation, prepared-resource loading, full readiness, and launch bootstrap share serialized in-flight work; unload/cache-clear gate out new readiness until reset finishes.
+- The product-owned iOS 27 `ColorCameraCoreAI` runtime and its weak C ABI remain the compatibility boundary for palette generation. The iOS 26 host does not directly import the higher-minimum Core AI runtime.
+- Historical Xcode 27 archive/weak-link fixture evidence remains valid for the established cross-version topology, but this round does not claim a new signed archive or Xcode Cloud result.
+- ColorCamera also links `AIProviderConfiguration`. Cloud fallback is opt-in, comes after on-device providers, stores API credentials in Keychain, and sends deterministic palette descriptors rather than photos/camera frames.
+- Provider endpoints/protocol construction come from AICoreKit presets/factory. Palette prompts, localization checks, role validation, and authoritative HEX mapping remain product-owned.
+- Signed-device iOS 26/iOS 27 qualification, repeated memory/thermal/cancellation observation, and current Release/distribution validation remain open gates before ColorCamera counts as a completed production consumer.
 
 See `MIGRATION_COLORCAMERA.md`.
 
@@ -58,27 +53,25 @@ See `MIGRATION_COLORCAMERA.md`.
 
 Recommended validation scope:
 
-- replace `Packages/AppAIKit` generic provider/core types;
-- dedicated OpenAI Responses and Anthropic adapters;
-- DeepSeek/custom through OpenAI-compatible adapter;
+- keep `Packages/AppAIKit` as a temporary product compatibility layer while removing generic infrastructure beneath it;
+- dedicated OpenAI Responses and Anthropic paths;
+- DeepSeek/custom through the OpenAI-compatible adapter;
 - native structured outputs where genuinely supported;
-- streaming, credentials, retry, observability, and routing.
+- streaming, credentials, retry, observability, routing, connection testing, and model-list UX.
 
 FateAtlas is the strongest test that AICoreKit can replace an organically grown application AI abstraction without leaking vendor-specific concepts into product UI.
 
 Current adoption evidence as of 2026-10-02:
 
-- FateAtlas main `03b65310` pins the validated AICoreKit baseline `794abcbd` through `Packages/AppAIKit`.
-- OpenAI-compatible chat/streaming (including DeepSeek/custom endpoints) and Anthropic chat/streaming execute through AICoreKit providers while AppAIKit preserves FateAtlas's existing public API.
-- Product-specific `fetchModels()` and connection testing remain in AppAIKit for incremental migration; the migrated chat/streaming path no longer maintains an independent URLSession/SSE transport implementation.
-- FateAtlas main `03b428cb` adds explicit product-owned JSON Schemas for zodiac, astrology, and BaZi enhancement payloads. When the configured remote protocol is Anthropic, those three production structured tasks execute through AICoreKit's native `AIProviderAnthropic.generateStructured` path rather than prompt-only JSON extraction.
-- FateAtlas main `cc357684` moves the first-party OpenAI path off generic Chat Completions semantics and onto AICoreKit's dedicated `AIProviderOpenAI` Responses API adapter. OpenAI chat, streaming, and schema-backed structured enhancement now use the vendor-specific provider with `store=false`.
-- DeepSeek/custom/OpenAI-compatible structured generation intentionally keeps the validated product fallback because generic chat-completions endpoints do not share one reliable JSON Schema extension. Apple local structured generation also remains a product fallback.
-- AppAIKit package tests pass after both the native structured and dedicated OpenAI Responses migrations.
-- The full FateAtlas app succeeds in a code-signing-disabled **Release** generic iOS build after both migrations, with the AICoreKit-backed providers linked into the production app target.
-- This satisfies the current production-consumer gate for the migrated cloud chat/streaming path. Remaining AppAIKit capabilities can migrate incrementally without invalidating that evidence.
+- FateAtlas pins AICoreKit `f6660787` through `Packages/AppAIKit`.
+- AppAIKit now directly depends on `AICore` and `AIProviderConfiguration` rather than directly depending on each concrete cloud-provider target.
+- Its existing OpenAI Responses, Anthropic, and OpenAI-compatible wrappers construct validated `AIProviderProfile` values and delegate provider creation to `AIConfiguredProviderFactory`, preserving endpoint/model/provider identity plus timeout/token/temperature defaults.
+- OpenAI generation and connection testing both use the Responses path; Anthropic uses the Anthropic path; DeepSeek/custom compatible endpoints use the compatible path. Duplicate raw URLSession/header implementations that existed only for connection testing were removed.
+- Native structured generation remains enabled where the provider contract supports it; DeepSeek/custom compatible structured output keeps the product's validated fallback because generic compatible endpoints do not guarantee one JSON-schema extension.
+- Model discovery remains product-owned intentionally: the compatible `/models` helper supports FateAtlas's model-list UX and is not treated as a generic generation contract.
+- Earlier package/Release evidence established FateAtlas as the first completed production consumer for the migrated cloud path. No new Release/CI result is claimed for the latest provider-configuration refactor in this round.
 
-FateAtlas therefore counts as the **first completed AICoreKit production consumer**.
+FateAtlas therefore remains the **first completed AICoreKit production consumer** for the already-validated migrated cloud path, while broader AppAIKit cleanup can continue incrementally.
 
 See `MIGRATION_FATEATLAS.md`.
 
@@ -90,19 +83,21 @@ Recommended validation scope:
 - structured next-exercise recommendation;
 - evidence-reference validation;
 - natural-language metronome/practice actions through tools;
-- local-first with optional cloud fallback.
+- Apple-local-first with optional cloud fallback.
 
 MetronomePro must preserve the architectural rule that generative AI interprets deterministic evidence rather than generating the evidence itself.
 
 Current adoption evidence as of 2026-10-02:
 
-- MetronomePro main `98a48f0a` keeps the generative layer in `Packages/PracticeCoachAI`, now pinned to the validated AICoreKit baseline `794abcbd`. `PracticeFeature` keeps deterministic session/activity/timing evidence construction and depends on the small AI package only for interpretation.
-- The production Practice Session Detail path still creates `PracticeCoachEvidence` from deterministic facts and calls `PracticeCoachService`; there is no alternate generic provider abstraction for this migrated path.
-- `PracticeCoachAI` uses AICoreKit `AICore`, `AIOrchestration`, and `AIProviderApple` with `.localFirst` text generation. Its contract tests verify that the request contains only the supplied evidence JSON plus explicit unknowns and cannot turn unmeasured time, motivation, cheating, pitch accuracy, or musical expression into facts.
-- MetronomePro main `98a48f0a` has repeatable CI evidence that `PracticeCoachAI` builds in **Release** configuration and its tests pass against AICoreKit `794abcbd` without access to the private `MetronomeEngine` repository.
-- Full `PracticeFeature`, MetronomePro, and Metronome26 Release builds remain gated by `METRONOMEPRO_CI_READ_TOKEN`. When the token is absent the workflow explicitly warns and skips those steps; the green workflow is therefore module-level evidence, not full application Release evidence.
-- Both Metronome Xcode Cloud workflows were already failing before the current AICoreKit/package extraction, so those historical red statuses are tracked separately rather than treated as proof of an AICoreKit regression.
-- Until a real full-app production/Release build or archive succeeds, MetronomePro does **not** count as a completed production consumer.
+- MetronomePro pins AICoreKit `f6660787` through `Packages/PracticeCoachAI`.
+- `PracticeFeature` remains the deterministic source of session/activity/timing evidence; `PracticeCoachAI` owns only generative interpretation.
+- The default service registry contains Apple Foundation Models first and requests `.localFirst`. If the user explicitly enables a valid remote profile, the AICoreKit orchestrator may fall back to it after local generation fails.
+- Remote presets are constructed through `AIProviderConfiguration`; shared SettingsFeature UI edits provider/model/base-URL preferences and stores API credentials in Keychain.
+- MetronomePro and Metronome26 share the same settings implementation rather than forking provider configuration.
+- Contract tests protect the evidence-only request boundary and remote profile settings. Raw practice recordings are not sent to remote language models, and AI output cannot mutate factual practice time, goals, achievements, or leaderboard data.
+- Historical module-level validation remains useful evidence, but this round does not claim a new full-app Release/archive or CI result. Full application production validation remains open.
+
+Until a real current full-app production/Release build or archive succeeds, MetronomePro does **not** count as a completed production consumer.
 
 See `MIGRATION_METRONOMEPRO.md`.
 
