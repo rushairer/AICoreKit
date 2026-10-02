@@ -23,3 +23,17 @@ Before 0.2, the compatibility lab must cover:
 3. Release archive and distribution validation.
 4. Model load and inference after the ABI boundary is proven.
 5. Cancellation, repeated model load, and memory-pressure behavior.
+
+
+## Lower-minimum app archive fixture
+
+`ArchiveFixture` is a minimal iOS 26 application target that weak-links and embeds the iOS 27 `AICoreKitCoreAIRuntime.framework` through normal Xcode framework/link/embed phases.
+
+CI archives the fixture with Xcode 27 and verifies:
+
+- the application bundle and Mach-O declare iOS 26;
+- the embedded runtime bundle and Mach-O declare iOS 27;
+- the application records `LC_LOAD_WEAK_DYLIB` for the runtime;
+- the weak Core AI C ABI reference survives Release archiving.
+
+This is a packaging/Archive compatibility test. App Store Connect distribution validation and signed physical-device execution remain separate release gates.

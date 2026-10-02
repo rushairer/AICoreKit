@@ -45,3 +45,7 @@ jobs:
         run: |
           ./Scripts/build-verify-coreai-host-fixture.sh \
             "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/PackageFrameworks/AICoreKitCoreAIRuntime.framework"
+      - name: Verify lower-minimum app archive
+        run: |
+          ./Scripts/build-verify-coreai-archive-fixture.sh \
+            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/PackageFrameworks/AICoreKitCoreAIRuntime.framework"
