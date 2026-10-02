@@ -19,9 +19,16 @@ Override `COREAI_MAX_CONTEXT_LENGTH`, `COREAI_OUTPUT_ROOT`, or `COREAI_PLATFORM`
 Resolve the exported resource directory in the host app and inject it:
 
 ```swift
+let modelProfile =
+    CoreAIModelProfile(
+        identifier: "qwen3-0.6b",
+        displayName: "Qwen3-0.6B",
+        sourceIdentifier: "Qwen/Qwen3-0.6B"
+    )
+
 let resourceProvider =
     CoreAIDirectoryModelResourceProvider(
-        identifier: "qwen3-0.6b",
+        profile: modelProfile,
         directoryURL:
             Bundle.main.url(
                 forResource:
