@@ -3933,6 +3933,155 @@ extension AICoreKitTests {
         )
     }
 
+    func testCoreAILoadWaitersDoNotDuplicateLoadAfterPreparation() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: false
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        let preparation =
+            Task {
+                try await controller
+                    .preparePersistentResources()
+            }
+
+        try await Task.sleep(
+            nanoseconds: 5_000_000
+        )
+
+        async let firstLoad: Void =
+            controller
+            .loadPreparedResources()
+        async let secondLoad: Void =
+            controller
+            .loadPreparedResources()
+
+        try await preparation.value
+        _ = try await (
+            firstLoad,
+            secondLoad
+        )
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            1
+        )
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+        XCTAssertEqual(
+            await controller
+                .currentState(),
+            .ready
+        )
+    }
+
+    func testCoreAIBootstrapCoalescesConcurrentPreparedLoads() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            RecordingCoreAILifecycleBridge(
+                prepared: true
+            )
+        let controller =
+            CoreAIModelLifecycleController(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+
+        async let first =
+            controller
+            .bootstrapIfPrepared()
+        async let second =
+            controller
+            .bootstrapIfPrepared()
+
+        let results =
+            try await (
+                first,
+                second
+            )
+
+        XCTAssertTrue(
+            results.0
+        )
+        XCTAssertTrue(
+            results.1
+        )
+
+        let counts =
+            await bridge.counts()
+        XCTAssertEqual(
+            counts.prepare,
+            0
+        )
+        XCTAssertEqual(
+            counts.load,
+            1
+        )
+        XCTAssertEqual(
+            await controller
+                .currentState(),
+            .ready
+        )
+    }
+
     func testCoreAIClearPreparationCacheKeepsLifecycleDistinct() async throws {
         let temporaryURL =
             FileManager.default
