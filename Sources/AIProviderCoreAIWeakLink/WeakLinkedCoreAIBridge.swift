@@ -1,5 +1,4 @@
 import AICore
-import AICoreWeakBridgeShim
 import AIProviderCoreAI
 
 public struct WeakLinkedCoreAIBridge:
@@ -9,6 +8,8 @@ public struct WeakLinkedCoreAIBridge:
         WeakSymbolCoreAIBridge
 
     public init(
+        availabilitySymbol: String =
+            "AICKCoreAIIsAvailable",
         generateSymbol: String =
             "AICKCoreAIGenerate",
         isPreparedSymbol: String =
@@ -25,6 +26,8 @@ public struct WeakLinkedCoreAIBridge:
     ) {
         dynamicBridge =
             WeakSymbolCoreAIBridge(
+                availabilitySymbol:
+                    availabilitySymbol,
                 generateSymbol:
                     generateSymbol,
                 isPreparedSymbol:
@@ -43,28 +46,8 @@ public struct WeakLinkedCoreAIBridge:
     public func availability()
         async -> AIAvailability
     {
-        guard Self.runtimeOSAvailable else {
-            return .unavailable(
-                .unsupportedPlatform
-            )
-        }
-
-        guard
-            AICKCoreAIWeakSymbolPresent()
-                != 0
-        else {
-            return .unavailable(
-                .frameworkUnavailable
-            )
-        }
-
-        return
-            AICKCoreAIWeakIsAvailable()
-                != 0
-            ? .available
-            : .unavailable(
-                .serviceUnavailable
-            )
+        await dynamicBridge
+            .availability()
     }
 
     public func generate(
@@ -116,16 +99,5 @@ public struct WeakLinkedCoreAIBridge:
             .clearPreparationCache(
                 modelPath: modelPath
             )
-    }
-
-    private static var runtimeOSAvailable: Bool {
-        if #available(
-            iOS 27.0,
-            macOS 27.0,
-            *
-        ) {
-            return true
-        }
-        return false
     }
 }
