@@ -62,6 +62,18 @@ Do not copy the export/install implementation into each product repository.
 
 This keeps model validation, Apple Core AI revision policy, and provisioning behavior in one place.
 
+## What “install/upload” means
+
+For the normal bundled-model workflow, provisioning has three physical stages:
+
+1. export/convert the source model on the developer Mac;
+2. copy the exported Core AI resource into the host application's or Swift Package's resource directory;
+3. build/sign/install the app, at which point Xcode includes that resource in the application bundle delivered to the device.
+
+AICoreKit does not need a separate private “upload model to iPhone” API for this bundled flow.
+
+If a product chooses application-managed or on-demand model download instead, the host owns that network/storage/licensing policy. AICoreKit consumes the resolved local directory after the product makes it available. Runtime executable code must not be downloaded dynamically.
+
 ## Required host setup
 
 Provisioning the model resource is necessary but not sufficient.
