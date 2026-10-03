@@ -1,5 +1,9 @@
 # Roadmap
 
+## Stabilization status
+
+The planned shared feature surface is closed for the current pre-1.0 baseline. Remaining unchecked items below are production-validation gates, not a backlog for speculative framework expansion. See `STABILIZATION.md`.
+
 ## 0.1 Foundation
 
 - [x] Vendor-neutral core types and provider protocol.
@@ -20,7 +24,7 @@
 - [x] Add an isolated iOS/macOS 27 Core AI runtime Swift package.
 - [x] Add explicit model prepare / unload lifecycle hooks.
 - [x] Separate persistent Core AI preparation from current-process loading, including cache inspection, cache clearing, launch-safe bootstrap, serialized shared in-flight lifecycle tasks, and a reset gate that rejects new readiness while unload/cache-clear is active.
-- [x] Add a Qwen3-0.6B export and integration fixture without shipping model assets.
+- [x] Add a Qwen3-0.6B reference compatibility fixture without shipping model assets. This fixture is not a product-wide recommendation for the highest-quality model.
 - [x] Build and validate the iOS 27 runtime framework artifact on an Xcode 27 CI runner.
 - [x] Add a lower-minimum Mach-O host fixture that proves the runtime is weak-linked.
 - [x] Add a Swift 5 language-mode consumer fixture for the lifecycle API used by lower-minimum host apps.
