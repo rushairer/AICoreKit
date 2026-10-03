@@ -2,6 +2,10 @@
 
 AICoreKit's remaining 1.0 local-runtime gate requires evidence from signed applications on real devices. Archive and weak-link fixtures prove packaging topology, but they cannot prove launch, inference, memory, cancellation, or thermal behavior on hardware.
 
+Before running this matrix, provision the real host model resource according to `LOCAL_MODELS.md`. A no-model build is not device inference evidence.
+
+ColorCamera has already provided real iOS 27 Qwen3-0.6B inference evidence for one production integration. That closes the basic "can the shared runtime execute this model in a real app?" question, but it does not replace the lower-OS, signed-distribution, repeated memory/cancellation, or thermal matrix below.
+
 ## Required device matrix
 
 At minimum, validate:
