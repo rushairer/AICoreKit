@@ -97,6 +97,16 @@ The higher-minimum implementation lives in the nested `Runtime/CoreAIRuntime` pa
 
 AICoreKit also owns the reusable runtime build tooling: `Scripts/build-coreai-runtime-framework.sh` builds and verifies a platform-specific framework, while `Scripts/xcode-build-coreai-runtime.sh` is the application-target integration entry point. Host apps only declare the final weak framework link and Embed & Sign phases because those are properties of the host Mach-O/app bundle; they should not maintain a product-specific Core AI bridge implementation.
 
+For app-supplied local models, the preferred developer workflow is:
+
+```bash
+./Scripts/provision-coreai-model.sh \
+  --destination /path/to/App/Resources/AppLocalModel \
+  --output-name AppLocalModel
+```
+
+That command exports the reference model (Qwen3-0.6B by default), installs it into the host-owned resource directory, and verifies that the installed directory contains Core AI model assets. A successful build with no model resource is only a graceful-degradation check, not proof of local inference. See [docs/LOCAL_MODELS.md](docs/LOCAL_MODELS.md) for the mandatory host/agent completion gates.
+
 See `CompatibilityLab/CORE_AI_ABI.md` and `Runtime/CoreAIRuntime/README.md` for the boundary and host-integration contracts.
 
 ## Installation
@@ -119,6 +129,8 @@ swift test
 ## Compatibility
 
 See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for platform minimums, provider capability support, and the conformance contract.
+
+See [docs/LOCAL_MODELS.md](docs/LOCAL_MODELS.md) for Core AI model export/provisioning, host resource setup, lifecycle rules, and signed-device completion criteria.
 
 See [docs/VERSIONING.md](docs/VERSIONING.md) for the SemVer, API stability, deprecation, and Core AI ABI policy.
 
