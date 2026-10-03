@@ -27,25 +27,21 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
       - name: Swift version
         run: swift --version
-      - name: Build Core AI runtime for iOS
-        working-directory: Runtime/CoreAIRuntime
+      - name: Build reusable Core AI runtime artifact
         run: |
-          xcodebuild \
-            -scheme AICoreKitCoreAIRuntime \
-            -destination 'generic/platform=iOS' \
-            -sdk iphoneos \
-            -derivedDataPath "$RUNNER_TEMP/AICoreKitCoreAIRuntime" \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+          /bin/sh ./Scripts/build-coreai-runtime-framework.sh \
+            "$RUNNER_TEMP/AICoreKitRuntimeOutput" \
+            Debug \
+            iphoneos
       - name: Verify Core AI runtime artifact
         run: |
           ./Scripts/verify-coreai-runtime-framework.sh \
-            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/PackageFrameworks/AICoreKitCoreAIRuntime.framework"
+            "$RUNNER_TEMP/AICoreKitRuntimeOutput/AICoreKitCoreAIRuntime.framework"
       - name: Verify lower-minimum host weak link
         run: |
           ./Scripts/build-verify-coreai-host-fixture.sh \
-            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/PackageFrameworks/AICoreKitCoreAIRuntime.framework"
+            "$RUNNER_TEMP/AICoreKitRuntimeOutput/AICoreKitCoreAIRuntime.framework"
       - name: Verify lower-minimum app archive
         run: |
           ./Scripts/build-verify-coreai-archive-fixture.sh \
-            "$RUNNER_TEMP/AICoreKitCoreAIRuntime/Build/Products/Debug-iphoneos/PackageFrameworks/AICoreKitCoreAIRuntime.framework"
+            "$RUNNER_TEMP/AICoreKitRuntimeOutput/AICoreKitCoreAIRuntime.framework"
