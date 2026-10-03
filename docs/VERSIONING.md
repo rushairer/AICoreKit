@@ -13,7 +13,7 @@ Until `1.0.0`:
 - every intentional breaking change should be documented in release notes;
 - applications should pin an exact version or revision for production evaluation rather than tracking `main`.
 
-No `1.0.0` tag should be created until the remaining production-validation and migration gates in the roadmap are satisfied.
+No `1.0.0` tag should be created until the remaining production-validation and migration gates in the roadmap are satisfied. `STABILIZATION.md` defines the current feature-freeze and change-admission policy.
 
 ### Pre-1.0 stabilization freeze
 
