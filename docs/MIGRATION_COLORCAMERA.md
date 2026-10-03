@@ -1,229 +1,228 @@
-# Migrating ColorCamera to AICoreKit
+# ColorCamera integration with AICoreKit
 
-Baseline reviewed: `rushairer/ColorCamera` main at `0013fccf4cfd31f3e86d5f39852d628c33b815db`.
+Current integration baseline: 2026-10-03.
 
-This guide is intentionally conservative. ColorCamera is the source of several AICoreKit compatibility ideas, but its current AI implementation also contains product-specific capabilities that AICoreKit must not erase.
+ColorCamera is the primary production reference for AICoreKit's lower-minimum host + higher-minimum Core AI runtime, app-supplied local model lifecycle, explicit local/cloud execution policy, and product-owned semantic validation.
 
-## Migration goal
+This document describes the **current architecture**. Historical product-specific Core AI framework/C ABI experiments are no longer the production design.
 
-Use AICoreKit for reusable AI runtime/provider infrastructure while keeping ColorCamera's color-domain intelligence, deterministic validation, localization, UI progress, and model UX inside ColorCamera.
+## Integration goal
 
-The migration is complete only when behavior is preserved on both iOS 26 and iOS 27.
+AICoreKit owns reusable AI runtime/provider infrastructure.
 
-## Current ColorCamera architecture
+ColorCamera owns color-domain truth, prompts, output semantics, deterministic validation, and user experience.
 
-The current product has two generative paths behind `ColorIntelligenceProviding`:
-
-1. `AppleFoundationModelColorIntelligenceProvider`
-   - uses Apple Foundation Models directly;
-   - uses `@Generable` product-specific output types;
-   - maps generated color indices back to authoritative palette colors.
-
-2. `CoreAILocalModelColorIntelligenceProvider`
-   - uses the weak-linked `ColorCameraCoreAI` iOS 27 framework;
-   - owns Qwen model resource discovery;
-   - coordinates preparation, runtime loading, prewarming, reset, progress, retry, and timeout behavior;
-   - exchanges a product-specific palette request/response over the current `CCACoreAI*` C ABI.
-
-`ColorIntelligenceService` owns fallback ordering and runs generated output through product validation before returning it.
-
-## What must stay in ColorCamera
-
-The following are product/domain logic and should not move into AICoreKit:
-
-- `PaletteFacts`, `PaletteFactsBuilder`, and deterministic color calculations;
-- semantic color descriptors such as hue/lightness/chroma bands;
-- `PaletteIntelligence` and palette-role domain types;
-- `PaletteRoleValidator`;
-- output-language validation and locale-specific generation instructions;
-- product prompts and naming rules;
-- generic-name repair rules;
-- mapping generated role indices back to authoritative palette HEX values;
-- ColorCamera UI progress states and Settings UI;
-- model-install UX and product-owned resource packaging decisions.
-
-AICoreKit should never learn what a palette, hue family, WCAG rule, or ColorCamera naming convention is.
-
-## What AICoreKit can replace
-
-AICoreKit is the intended home for reusable infrastructure such as:
-
-- provider identity, availability, capabilities, and normalized errors;
-- provider routing/fallback primitives where they fit the product flow;
-- weak-linked Core AI host/runtime boundary;
-- local model resource lifecycle abstractions;
-- cloud provider adapters;
-- credentials, retry, and observability;
-- normalized structured generation and tool calling for providers that support those contracts.
-
-## Important parity gaps
-
-Do not delete ColorCamera's current AI code until these differences are resolved.
-
-| Area | ColorCamera today | AICoreKit today | Migration implication |
-| --- | --- | --- | --- |
-| Apple structured output | Native `@Generable` product schema | Apple provider advertises text generation only | Keep the ColorCamera Apple adapter until AICoreKit has an equally reliable native structured extension, or intentionally keep this adapter permanently as a product-specific provider. |
-| Core AI ABI | `CCACoreAIAnalyze/Prewarm/Reset` with product JSON and progress | Generic `AICKCoreAIGenerate/Prepare/Unload` ABI | Do not swap binaries in place. Introduce an adapter/runtime migration with explicit parity tests. |
-| Progress | Preparing/loading/warming/generating stages | Generic provider response still has no model-progress channel | Keep ColorCamera generation/progress coordination until a reusable progress contract is justified. The current Settings initialization UI uses discrete preparing/loading states rather than percentage progress. |
-| Preparation semantics | Persistent preparation is separate from runtime loading; app tracks prepared/ready states | `CoreAIModelLifecycleController` now distinguishes persistent preparation, process loading, ready state, launch-safe bootstrap, and cache clearing | Lifecycle coordination has migrated; keep ColorCamera's product-facing state labels/UI only. |
-| Reset | Product distinguishes runtime unload from clearing persistent first-use preparation | Generic lifecycle now exposes `unload()` and `clearPreparationCache()` as separate operations, with stale completion invalidation | Product UI can delegate these operations to AICoreKit while retaining ColorCamera wording and confirmation UX. |
-| Domain validation | Strong post-generation language/role validation | Provider-neutral | Must remain in ColorCamera. |
-
-## Recommended migration sequence
-
-### Phase 0 — Add AICoreKit without behavior changes
-
-Add AICoreKit as a package dependency, pinned to a known revision or pre-1.0 release.
-
-Do not remove:
-
-- `ColorCameraCoreAI`;
-- the current weak bridge;
-- `AppleFoundationModelColorIntelligenceProvider`;
-- `CoreAILocalModelColorIntelligenceProvider`.
-
-The purpose of this phase is compile/link integration only.
-
-### Phase 1 — Adopt common contracts at the edges
-
-Introduce ColorCamera adapters that translate between product types and AICoreKit types where this is genuinely reusable:
-
-- map AICoreKit availability/errors into `ColorIntelligenceUnavailableReason`;
-- use AICoreKit provider IDs/capabilities for diagnostics rather than inventing another provider taxonomy;
-- use AICoreKit observability for provider/runtime metrics where it does not expose palette data.
-
-Keep `ColorIntelligenceProviding` as the product-facing protocol.
-
-### Phase 2 — Migrate the Core AI host boundary
-
-Build an A/B implementation behind `ColorIntelligenceProviding`:
-
-- current `CCACoreAI*` path;
-- AICoreKit `AIProviderCoreAI` + `AIProviderCoreAIWeakLink` path.
-
-The AICoreKit path must preserve:
-
-- iOS 26 launch without loading the iOS 27 image;
-- iOS 27 model discovery;
-- long first preparation versus fast subsequent runtime load;
-- explicit reset semantics;
-- cancellation/timeouts;
-- user-visible progress;
-- identical deterministic post-validation.
-
-If progress/reset cannot be preserved, extend AICoreKit with a reusable contract before switching the product.
-
-### Phase 3 — Decide Apple Foundation Models ownership
-
-ColorCamera currently gets value from product-native `@Generable` output.
-
-Two valid end states exist:
-
-1. AICoreKit gains a reliable Apple-native structured-generation extension and ColorCamera adopts it; or
-2. ColorCamera keeps a thin Apple product adapter while AICoreKit remains responsible for the shared provider/runtime infrastructure.
-
-Do not downgrade native structured generation to prompt-only JSON simply to reduce file count.
-
-### Phase 4 — Remove duplicated runtime infrastructure
-
-Only after device/archive parity is proven:
-
-- remove redundant ColorCamera weak-link/runtime code that AICoreKit fully replaces;
-- remove duplicate availability/error normalization;
-- keep domain prompts, validation, and UI state in ColorCamera.
-
-## Acceptance gates
-
-The migration is not complete until all of these pass:
-
-- iOS 26 physical-device cold launch with the iOS 27 runtime embedded weakly;
-- iOS 27 physical-device real Qwen inference;
-- first preparation and subsequent fast-load behavior;
-- model reset followed by a clean re-preparation cycle;
-- cancellation and timeout handling;
-- memory and thermal observation during repeated inference;
-- Release archive and distribution validation;
-- existing ColorCamera language-validation tests;
-- deterministic role/HEX validation;
-- current Xcode Cloud build.
-
-## Dependency direction
-
-The desired dependency graph is:
+The boundary is:
 
 ```text
-ColorCamera domain/UI
-        |
-        +-- ColorIntelligenceProviding
-        |       |
-        |       +-- product-specific adapters
-        |
-        +-- AICoreKit
+ColorCamera product intent / color facts
                 |
-                +-- Apple/system provider infrastructure
-                +-- Core AI host/runtime infrastructure
-                +-- optional cloud providers
+                v
+         AICoreKit providers
+                |
+                v
+       generated candidate output
+                |
+                v
+ColorCamera domain/language/role validation
+                |
+                v
+          product UI / apply
 ```
 
-AICoreKit must not depend on ColorCamera.
+Generative AI remains optional. Deterministic color math, accessibility analysis, palette editing, and export must continue to work when no generative provider is available.
 
-## First production use
+## Current provider architecture
 
-ColorCamera is a strong candidate to become the first AICoreKit production consumer because it already exercises the hardest compatibility boundary: a lower-minimum iOS host with an optional higher-minimum local AI runtime.
+Color Intelligence has three product execution modes:
 
-The migration should remain incremental until the remaining signed-device and distribution gates are complete.
+- **Automatic** — try on-device providers first, then an explicitly enabled cloud provider if needed;
+- **On-device** — use only local/system providers;
+- **Cloud** — use only the configured remote provider.
 
+The mode is product state. AICoreKit supplies routing/provider mechanisms but does not own the Settings labels or preference semantics.
 
-## Lifecycle behavior extracted from ColorCamera
+### Apple Foundation Models
 
-ColorCamera's latest local-model work established several lifecycle rules that are now implemented directly by AICoreKit:
+ColorCamera keeps its product-specific Apple Foundation Models adapter where native product schema behavior is useful.
 
-- persistent Core AI specialization is distinct from current-process residency;
-- a fresh process must inspect persistent preparation rather than reporting an already specialized model as never initialized;
-- application launch may load an already prepared model but must not trigger the expensive first preparation;
-- unload and preparation-cache clearing are different operations;
-- clearing preparation keeps model assets installed and intentionally makes the next real use pay first-use preparation again;
-- concurrent first use, settings initialization, and generation requests share one readiness operation instead of launching duplicate model loads.
+Do not move palette types or naming semantics into AICoreKit merely to eliminate this adapter.
 
-When ColorCamera migrates its Core AI provider, its product-specific initialization UI may remain, but the `CoreAIModelPrewarmer` and low-level preparation/load/cache bookkeeping should be replaced by `CoreAIModelLifecycleController` / `CoreAIProvider`.
+### Qwen / Core AI local provider
 
+The production local path uses AICoreKit infrastructure:
 
-## Migration status update — 2026-10-02
+- `CoreAIModelProfile`;
+- `CoreAIDirectoryModelResourceProvider`;
+- `CoreAIProvider`;
+- `CoreAIModelLifecycleController`;
+- `CoreAIModelSettingsStore`;
+- `AIProviderCoreAIWeakLink`;
+- `WeakLinkedCoreAIBridge`;
+- shared `AICoreKitCoreAIRuntime.framework`.
 
-ColorCamera now consumes AICoreKit baseline `0d72ce0b` for shared local lifecycle/settings coordination plus cloud-provider configuration.
+ColorCamera no longer owns a product-specific Core AI framework or C ABI.
 
-Local-model lifecycle status:
+The iOS 26 host must not import or directly link `CoreAILM` / `CoreAILanguageModels`. The shared iOS 27 runtime is embedded by the app and loaded through the AICoreKit weak-link boundary only on supported systems.
 
-- the iOS 26 host still weak-links the product-owned iOS 27 `ColorCameraCoreAI` runtime;
-- persistent first-use preparation remains distinct from current-process model loading;
-- app launch uses `bootstrapIfPrepared()`, so an unprepared model is never subjected to the long first preparation merely because the app started;
-- explicit prepare/load/full-readiness/bootstrap requests are serialized by `CoreAIModelLifecycleController` before asynchronous resource checks, preventing actor reentrancy from duplicating native prepare/load work;
-- unload and preparation-cache clearing enter a reset gate; new readiness requests are rejected while reset is active, and late native callbacks from invalidated operations cannot restore stale `ready` state;
-- clearing preparation keeps installed model assets and intentionally makes the next real use pay the first-use preparation cost again;
-- the product C ABI remains one-to-one with those lifecycle semantics: `CCACoreAIPrepare`, `CCACoreAILoad`, `CCACoreAIReset`, and `CCACoreAIClearPreparationCache`.
+### Cloud provider
 
-Execution-policy status:
+ColorCamera uses `AIProviderConfiguration` profiles/presets/factory infrastructure.
 
-- ColorCamera now exposes an explicit product-owned execution mode: **Automatic**, **On-device**, or **Cloud**.
-- Automatic preserves the ordered local-first behavior and only continues to an enabled/configured cloud provider when the local path cannot return a valid result.
-- On-device excludes cloud providers from Color Intelligence analysis; an explicit Settings connection test remains a separate user action.
-- Cloud excludes Apple/Core AI providers, skips launch-time local-model bootstrap, and unloads current Core AI residency when selected without clearing persistent preparation.
-- This policy remains in ColorCamera rather than AICoreKit because it is user-facing product preference; AICoreKit supplies provider/lifecycle mechanisms, not the product's settings semantics.
-- AICoreKit now provides `CoreAIModelProfile` for reusable model identity and `CoreAIModelSettingsStore` for observable lifecycle state/actions. ColorCamera centralizes only its Qwen profile instance, product bundle resource name, and localized presentation; Settings, first-use initialization, and launch bootstrap all consume the same AICoreKit store and the former product-side lifecycle store has been removed.
+The product owns:
 
-Cloud-provider status:
+- provider/model/base-URL preferences;
+- Keychain credential persistence;
+- connection-test UX;
+- Automatic/On-device/Cloud semantics.
 
-- ColorCamera links `AIProviderConfiguration` and uses `AIProviderPreset` / `AIConfiguredProviderFactory` instead of maintaining vendor endpoint/header construction;
-- Settings keeps provider/model/base-URL policy in the product and stores API credentials in Keychain;
-- cloud execution is controlled by ColorCamera's explicit execution mode: Automatic is local-first, On-device excludes cloud from analysis, and Cloud excludes local generation;
-- the remote provider receives deterministic palette descriptors only. Photos and camera frames are never sent to the cloud fallback;
-- product-specific palette prompts, language validation, role validation, and authoritative HEX mapping remain inside ColorCamera.
+Remote Color Intelligence receives deterministic palette descriptors. Photos and camera frames are not sent to the cloud generation path.
 
-The product-specific `ColorCameraCoreAI` generation/repair runtime remains intentionally in place. The shared library owns lifecycle and provider infrastructure, not ColorCamera's palette domain.
+## Local model provisioning
 
-No new full signed archive/CI evidence is claimed by this update. Remaining production qualification still includes signed-device lower-OS launch, iOS 27 real inference under repeated use, memory/thermal/cancellation observation, and Release/distribution validation when build capacity is available.
+ColorCamera's developer entry point is:
 
+```bash
+./scripts/core_ai/install_qwen3_local_model.sh
+```
 
-## Production validation update
+The product wrapper resolves the AICoreKit revision pinned by the Xcode project and delegates model export/install to AICoreKit shared tooling.
 
-ColorCamera has now passed signed-device validation for both the Qwen/Core AI local path and configured cloud Color Intelligence path. The product keeps palette schema/language/role validation and its bounded repair retry, while AICoreKit owns generic response-completion validation through `AIResponse.validatedCompletedText()`. Product code should reject incomplete provider responses before domain validation rather than treating non-empty text as success.
+If an existing export exists at `Artifacts/CoreAI/ColorCameraLocalModel`, the wrapper reuses it. Otherwise the shared AICoreKit provisioning path can export Qwen3-0.6B first.
+
+The installed product resource is:
+
+```text
+ColorCamera/Resources/ColorCameraLocalModel
+```
+
+Generated model files remain git-ignored.
+
+Do not reintroduce independent ColorCamera copies of Apple `coreai-models` checkout/export/copy/validation logic. See `LOCAL_MODELS.md`.
+
+A repository checkout without model assets may still build and report `localModelMissing`. That proves graceful degradation only; it is not local-inference acceptance evidence.
+
+ColorCamera has already completed real signed-device iOS 27 Qwen3-0.6B inference, so the shared runtime/model path has production-consumer evidence.
+
+## Lifecycle contract
+
+Keep these states distinct:
+
+1. model resource installed;
+2. persistent preparation absent/present;
+3. current-process resource loading;
+4. ready for generation;
+5. current-process residency unloaded;
+6. persistent preparation cache cleared.
+
+First preparation can be expensive. Later launches should use `bootstrapIfPrepared()` and perform only the faster load when persistent preparation already exists.
+
+App launch must not trigger the expensive first preparation for an unprepared model.
+
+`unload()` clears current-process residency only.
+
+`clearPreparationCache()` unloads and clears persistent specialization, causing the next actual use to pay first-preparation cost again while leaving installed model files intact.
+
+Settings and first-use UI consume the shared `CoreAIModelSettingsStore`; do not create a second product lifecycle state machine.
+
+## Product-owned Color Intelligence semantics
+
+These stay in ColorCamera:
+
+- `PaletteFacts` and deterministic color calculations;
+- OKLab / OKLCH facts;
+- deterministic color descriptors;
+- palette naming policy;
+- palette-specific prompts;
+- palette JSON/structured schema;
+- semantic role types and validation;
+- role-to-authoritative-HEX mapping;
+- output language validation;
+- generic-name detection;
+- bounded schema/language repair prompts;
+- WCAG/accessibility validation;
+- Color Intelligence UI/progress copy.
+
+AICoreKit must not learn palette, hue-family, ColorCamera naming, or WCAG product semantics.
+
+## Prompt and small-model rules
+
+Local Qwen prompts must consume deterministic color descriptors rather than asking the language model to derive color truth from raw HEX/hue values.
+
+Do not include concrete creative names as positive style examples. Small models can overfit and repeat them.
+
+Do not list overused words as negative examples merely to forbid them; lexical priming can increase repetition. Keep vocabulary/cliche detection in product-side validators and phrase prompt constraints abstractly.
+
+Locale instructions are not enough. Validate actual generated user-visible fields against the app language.
+
+## Response validation
+
+Provider output is not successful merely because `response.text` is non-empty.
+
+For generic text completion, AICoreKit owns:
+
+```swift
+try response.validatedCompletedText()
+```
+
+which rejects truncated, blocked, cancelled, failed, tool-call-only, or empty responses as appropriate.
+
+ColorCamera then applies product validation:
+
+1. schema/decoding;
+2. required semantic content;
+3. language;
+4. palette membership and role validity;
+5. generic naming/cliche rules;
+6. authoritative color mapping.
+
+ColorCamera may perform a **bounded** repair retry for product-specific schema/language problems. Do not move those repair prompts into AICoreKit.
+
+## Cloud privacy boundary
+
+Cloud generation receives only the deterministic palette evidence needed for the feature.
+
+Never send:
+
+- camera frames;
+- source photos;
+- unrelated user media.
+
+Connection testing is a separate explicit Settings action and does not change the execution-mode privacy contract.
+
+API credentials remain in Keychain or another host-owned secure store. AICoreKit does not persist product secrets.
+
+## Validation evidence
+
+As of 2026-10-03:
+
+- shared AICoreKit lifecycle/store is used by Settings, first use, and launch bootstrap;
+- shared `AICoreKitCoreAIRuntime.framework` replaces the old product runtime;
+- Qwen3-0.6B local inference has succeeded on a real iOS 27 device;
+- configured cloud Color Intelligence has succeeded on a real device;
+- first preparation and later warm load are distinguished;
+- cloud/local response completion is validated before product semantics;
+- lower-minimum host / higher-minimum runtime topology has independent AICoreKit Compatibility Lab archive evidence.
+
+## Remaining production gates
+
+The Color Intelligence implementation is functionally validated, but the complete AICoreKit 1.0 compatibility/distribution gate still includes:
+
+- signed lower-OS physical-device launch/fallback evidence;
+- repeated cancellation behavior;
+- memory/thermal observation under realistic camera + AI workload;
+- current signed Release/distribution/App Store packaging evidence.
+
+These open gates must not be confused with the already successful iOS 27 local inference result.
+
+## Agent rules
+
+When an agent works on ColorCamera AI:
+
+- read AICoreKit `docs/CONSUMER_INTEGRATION.md` and `docs/LOCAL_MODELS.md`;
+- do not recreate Core AI runtime/export/install/lifecycle infrastructure in ColorCamera;
+- use the product provisioning wrapper before claiming a local-model path is ready;
+- keep palette semantics and repair policy in ColorCamera;
+- keep deterministic color math authoritative;
+- do not claim device/distribution validation that was not actually run;
+- when a new reusable issue is discovered, first determine whether it is provider/runtime-wide before moving it into AICoreKit.
