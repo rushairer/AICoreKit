@@ -4,7 +4,7 @@ AICoreKit is a Swift AI runtime and provider abstraction for Apple-platform appl
 
 It is designed around capabilities rather than vendors, so product code can use a stable API while execution is routed across system, on-device, and cloud AI providers.
 
-> Status: pre-1.0 stabilization. The 1.0 compatibility contract is defined, but public API may still change before the first 1.0.0 tag.
+> Status: **feature-frozen pre-1.0 stabilization**. New shared API is added only when a real production consumer proves a product-neutral gap. See [docs/STABILIZATION.md](docs/STABILIZATION.md).
 
 ## Goals
 
@@ -105,7 +105,7 @@ For app-supplied local models, the preferred developer workflow is:
   --output-name AppLocalModel
 ```
 
-That command exports the reference model (Qwen3-0.6B by default), installs it into the host-owned resource directory, and verifies that the installed directory contains Core AI model assets. A successful build with no model resource is only a graceful-degradation check, not proof of local inference. See [docs/LOCAL_MODELS.md](docs/LOCAL_MODELS.md) for the mandatory host/agent completion gates.
+That command exports the reference compatibility model (Qwen3-0.6B by default), installs it into the host-owned resource directory, and verifies that the installed directory contains Core AI model assets. The reference model is a compatibility fixture, not a universal quality recommendation; products may override it. A successful build with no model resource is only a graceful-degradation check, not proof of local inference. See [docs/LOCAL_MODELS.md](docs/LOCAL_MODELS.md) for the mandatory host/agent completion gates.
 
 See `CompatibilityLab/CORE_AI_ABI.md` and `Runtime/CoreAIRuntime/README.md` for the boundary and host-integration contracts.
 
@@ -138,9 +138,9 @@ See [docs/VERSIONING.md](docs/VERSIONING.md) for the SemVer, API stability, depr
 
 Migration plans for the target consumers are documented in [docs/MIGRATION_COLORCAMERA.md](docs/MIGRATION_COLORCAMERA.md), [docs/MIGRATION_FATEATLAS.md](docs/MIGRATION_FATEATLAS.md), and [docs/MIGRATION_METRONOMEPRO.md](docs/MIGRATION_METRONOMEPRO.md). The production-consumer acceptance criteria live in [docs/CONSUMERS.md](docs/CONSUMERS.md).
 
-## Roadmap
+## Stabilization and roadmap
 
-See [docs/ROADMAP.md](docs/ROADMAP.md).
+See [docs/STABILIZATION.md](docs/STABILIZATION.md) for the feature-freeze/change-admission policy and [docs/ROADMAP.md](docs/ROADMAP.md) for the remaining validation gates.
 
 ## License
 
