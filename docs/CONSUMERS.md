@@ -8,9 +8,9 @@ The target is three production consumers with deliberately different workloads.
 
 | Product | Current state | Intended AICoreKit role | Main validation |
 | --- | --- | --- | --- |
-| ColorCamera | Pins AICoreKit `0d72ce0b`; local Core AI lifecycle uses reset-safe serialized readiness; optional cloud palette fallback uses `AIProviderConfiguration` with Keychain credentials | Shared local lifecycle + reusable cloud-provider infrastructure while palette semantics remain product-owned | iOS 26 host / iOS 27 local runtime, weak link, first-use preparation vs fast load, cloud descriptor-only fallback |
+| ColorCamera | Pins a validated AICoreKit stabilization revision; shared local Core AI lifecycle/runtime and optional cloud palette execution are both integrated | Shared local lifecycle/runtime + reusable cloud-provider infrastructure while palette semantics remain product-owned | iOS 27 real Qwen inference, weak-link topology, first-use preparation vs fast load, cloud descriptor-only execution |
 | FateAtlas | Pins AICoreKit `f6660787`; AppAIKit keeps the product API while provider construction, chat/streaming, structured cloud paths, and connection-test protocol execution delegate to AICoreKit | Incrementally remove duplicated generic provider/runtime plumbing without leaking vendor details into product UI | OpenAI Responses, Anthropic, DeepSeek/custom compatible endpoints, structured generation, streaming/fallback |
-| MetronomePro | Pins AICoreKit `0d72ce0b`; Practice Coach exposes Automatic / On-device / Cloud routing through `AIProviderConfiguration` and Keychain | Evidence-grounded Practice Coach with explicit local/cloud routing | deterministic evidence boundary, local-only vs remote-only policy, shared settings across MetronomePro/Metronome26 |
+| MetronomePro | Pins AICoreKit with shared response validation and local-model provisioning; Practice Coach exposes Automatic / On-device / Cloud routing through `AIProviderConfiguration` and Keychain | Evidence-grounded Practice Coach with explicit local/cloud routing | deterministic evidence boundary, real Qwen resource provisioning/device inference, local-only vs remote-only policy, shared settings across MetronomePro/Metronome26 |
 
 ## What counts as a production consumer
 
@@ -37,15 +37,15 @@ Recommended validation scope:
 
 ColorCamera should not be forced to remove its product-specific `@Generable` Apple adapter until equivalent behavior exists through a reusable contract.
 
-Current adoption evidence as of 2026-10-02:
+Current adoption evidence as of 2026-10-03:
 
-- ColorCamera pins AICoreKit `0d72ce0b` in the Xcode project, committed `Package.resolved`, and pre-build revision gate.
+- ColorCamera pins AICoreKit in the Xcode project, committed `Package.resolved`, and pre-build revision gate.
 - `CoreAIModelLifecycleController` owns the reusable lifecycle and `CoreAIModelSettingsStore` now owns the reusable observable Settings/first-use state+actions layer. ColorCamera deleted its product-side lifecycle store and shares the AICoreKit store across Settings, first-use initialization, and launch bootstrap.
-- The product-owned iOS 27 `ColorCameraCoreAI` runtime and its weak C ABI remain the compatibility boundary for palette generation. The iOS 26 host does not directly import the higher-minimum Core AI runtime.
-- Historical Xcode 27 archive/weak-link fixture evidence remains valid for the established cross-version topology, but this round does not claim a new signed archive or Xcode Cloud result.
+- ColorCamera no longer owns a product-specific Core AI framework/C ABI. It weak-links and embeds the shared iOS 27 `AICoreKitCoreAIRuntime.framework`; the lower-minimum host does not directly import the higher-minimum Core AI runtime.
+- Historical Xcode 27 archive/weak-link fixture evidence remains valid for the cross-version topology. ColorCamera has additionally completed real iOS 27 Qwen3-0.6B inference on a signed device and validated its configured cloud Color Intelligence path.
 - ColorCamera also links `AIProviderConfiguration`. Its explicit Automatic / On-device / Cloud product policy selects the permitted provider path; cloud access remains opt-in, stores API credentials in Keychain, and sends deterministic palette descriptors rather than photos/camera frames.
-- Provider endpoints/protocol construction come from AICoreKit presets/factory. Palette prompts, localization checks, role validation, and authoritative HEX mapping remain product-owned.
-- Signed-device iOS 26/iOS 27 qualification, repeated memory/thermal/cancellation observation, and current Release/distribution validation remain open gates before ColorCamera counts as a completed production consumer.
+- Provider endpoints/protocol construction come from AICoreKit presets/factory. Generic response completion uses `AIResponse.validatedCompletedText()`. Palette prompts, bounded schema/language repair, localization checks, role validation, and authoritative HEX mapping remain product-owned.
+- Real iOS 27 local inference is no longer an open question for ColorCamera. Lower-OS signed launch/fallback, repeated memory/thermal/cancellation observation, and current Release/distribution validation remain open gates before ColorCamera counts as a completed production consumer.
 
 See `MIGRATION_COLORCAMERA.md`.
 
@@ -90,15 +90,15 @@ MetronomePro must preserve the architectural rule that generative AI interprets 
 
 Current adoption evidence as of 2026-10-03:
 
-- MetronomePro pins AICoreKit `0d72ce0b` through `Packages/PracticeCoachAI`.
+- MetronomePro pins an AICoreKit stabilization revision through `Packages/PracticeCoachAI`; the current pin includes `AIResponse.validatedCompletedText()` and the shared local-model provisioning workflow.
 - `PracticeFeature` remains the deterministic source of session/activity/timing evidence; `PracticeCoachAI` owns only generative interpretation.
-- Practice Coach execution mode is explicit product state: **Automatic** builds Apple + configured remote providers and requests `.localFirst`; **On-device** builds Apple only and requests `.localOnly`; **Cloud** builds remote only and requests `.remoteOnly`. An invalid/missing Cloud configuration does not silently fall back to Apple.
+- Practice Coach execution mode is explicit product state: **Automatic** builds available local providers (Apple Foundation Models plus optional Qwen/Core AI) and may add the configured remote provider, then requests `.localFirst`; **On-device** uses the available local providers and requests `.localOnly`; **Cloud** builds remote only and requests `.remoteOnly`. An invalid/missing Cloud configuration does not silently fall back to local execution.
 - The configured service is recreated for each generated review, so a Settings change takes effect without restarting or recreating the session view.
 - Remote presets are constructed through `AIProviderConfiguration`; shared SettingsFeature UI edits provider/model/base-URL preferences and stores API credentials in Keychain.
 - MetronomePro and Metronome26 share the same SettingsFeature implementation, including the three-mode picker, full-width cloud connection-status rows, and all 15 SettingsFeature localizations.
 - Contract tests protect the evidence-only request boundary, execution-mode mapping, and remote profile settings. Raw practice recordings are not sent to remote language models, and AI output cannot mutate factual practice time, goals, achievements, or leaderboard data.
-- MetronomePro/26 wire an optional Qwen3-0.6B Core AI provider plus shared `CoreAIModelSettingsStore` lifecycle UI and a git-ignored product model resource installer. Apple Foundation Models remains the first local provider. Both iOS app targets weak-link/embed the shared iOS 27 `AICoreKitCoreAIRuntime.framework` and build on device + Simulator; signed-device Qwen inference and Practice Coach result validation remain the product acceptance gates.
-- AICore now exposes `AIResponse.validatedCompletedText()` so consumers can reject non-empty truncated, blocked, cancelled, failed, or otherwise incomplete generations before applying product-specific schema/language/domain validation.
+- MetronomePro/26 wire an optional Qwen3-0.6B Core AI provider plus shared `CoreAIModelSettingsStore` lifecycle UI. The product command `./Scripts/install_practice_coach_local_model.sh` now delegates export/install to AICoreKit `provision-coreai-model.sh` and targets the shared `PracticeCoachAI` Swift Package resource used by both apps. The generated model remains git-ignored. **The real Qwen resource still needs to be provisioned and exercised on a signed device before the Qwen Practice Coach path is considered validated.**
+- AICore exposes `AIResponse.validatedCompletedText()` so consumers reject non-empty truncated, blocked, cancelled, failed, or otherwise incomplete generations before product-specific validation. Practice Coach performs one bounded repair retry for incomplete output.
 
 Until a real current full-app production/Release build or archive succeeds, MetronomePro does **not** count as a completed production consumer.
 
