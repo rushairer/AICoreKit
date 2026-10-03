@@ -9,4 +9,4 @@ ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 
 export AICOREKIT_RUNTIME_DERIVED_DATA="${AICOREKIT_RUNTIME_DERIVED_DATA:-${TARGET_TEMP_DIR:-${TMPDIR:-/tmp}}/AICoreKitCoreAIRuntimeDerivedData}"
 
-"$ROOT_DIR/Scripts/build-coreai-runtime-framework.sh" "$BUILT_PRODUCTS_DIR" "$CONFIGURATION" "$PLATFORM_NAME"
+/bin/sh "$ROOT_DIR/Scripts/build-coreai-runtime-framework.sh" "$BUILT_PRODUCTS_DIR" "$CONFIGURATION" "$PLATFORM_NAME"
