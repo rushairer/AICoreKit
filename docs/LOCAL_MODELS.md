@@ -168,8 +168,12 @@ At minimum retain:
 - cancellation behavior;
 - memory and thermal observations relevant to the host workload.
 
-## Qwen3-0.6B
+## Reference compatibility model
 
-Qwen3-0.6B is the current reference local model because it is small enough to exercise the complete Core AI lifecycle in real product integrations.
+Qwen3-0.6B is the current **reference compatibility model** because it is small, already exercised through the complete Core AI lifecycle in a real production consumer, and provides a practical baseline for provisioning/runtime tests.
 
-It is a reference integration, not a hard-coded AICoreKit product policy. Applications may use another compatible model by overriding `--model-id` and supplying an appropriate `CoreAIModelProfile`.
+It is **not** a claim that Qwen3-0.6B is the newest or highest-quality product model.
+
+Applications should choose their actual product model using measured device latency, memory, language/output quality, repair rate, model size, and supported-device budget. Use `--model-id` plus the matching `CoreAIModelProfile` to override the reference model without changing AICoreKit globally.
+
+AICoreKit's reference model should change only for a compatibility/testing reason, not simply because a newer or larger model is released.
