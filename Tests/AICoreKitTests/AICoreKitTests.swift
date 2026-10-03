@@ -5641,3 +5641,237 @@ extension AICoreKitTests {
         }
     }
 }
+
+
+private actor CapturingStructuredCoreAIBridge:
+    CoreAIBridge
+{
+    private var capturedRequestJSON:
+        String?
+
+    func availability()
+        async -> AIAvailability
+    {
+        .available
+    }
+
+    func generate(
+        requestJSON: String,
+        modelPath: String
+    ) async -> CoreAIBridgeInvocation {
+        capturedRequestJSON =
+            requestJSON
+
+        return CoreAIBridgeInvocation(
+            status: .success,
+            responseJSON:
+                """
+                {
+                  "text": "{\"name\":\"Forest Study\",\"roles\":[{\"colorIndex\":0,\"role\":\"primary\"}]}",
+                  "finishReason": "completed",
+                  "inputTokens": 12,
+                  "outputTokens": 8
+                }
+                """
+        )
+    }
+
+    func requestJSON()
+        -> String?
+    {
+        capturedRequestJSON
+    }
+}
+
+private struct StructuredCoreAIFixture:
+    Decodable,
+    Equatable
+{
+    struct Role:
+        Decodable,
+        Equatable
+    {
+        let colorIndex: Int
+        let role: String
+    }
+
+    let name: String
+    let roles: [Role]
+}
+
+extension AICoreKitTests {
+    func testCoreAIProviderCarriesStructuredSchemaAcrossBridge() async throws {
+        let temporaryURL =
+            FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(
+                UUID().uuidString
+            )
+        try Data().write(
+            to: temporaryURL
+        )
+        defer {
+            try? FileManager.default
+                .removeItem(
+                    at: temporaryURL
+                )
+        }
+
+        let bridge =
+            CapturingStructuredCoreAIBridge()
+        let provider =
+            CoreAIProvider(
+                bridge: bridge,
+                resourceProvider:
+                    StaticCoreAIModelResourceProvider(
+                        resource:
+                            CoreAIModelResource(
+                                identifier:
+                                    "fixture.structured",
+                                path:
+                                    temporaryURL.path
+                            )
+                    )
+            )
+        let schema =
+            try AIStructuredOutputSchema(
+                name:
+                    "palette_result",
+                description:
+                    "Structured palette result",
+                schemaJSON:
+                    """
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {"type": "string"},
+                        "roles": {
+                          "type": "array",
+                          "maxItems": 4,
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "colorIndex": {"type": "integer"},
+                              "role": {
+                                "type": "string",
+                                "enum": ["primary", "secondary"]
+                              }
+                            },
+                            "required": ["colorIndex", "role"]
+                          }
+                        }
+                      },
+                      "required": ["name", "roles"]
+                    }
+                    """
+            )
+
+        let value:
+            StructuredCoreAIFixture =
+            try await provider
+            .generateStructured(
+                AIStructuredRequest(
+                    instructions:
+                        "Use only supplied facts.",
+                    input:
+                        "index=0 hueFamily=green",
+                    executionPreference:
+                        .localOnly,
+                    schema:
+                        schema,
+                    maxOutputTokens:
+                        128,
+                    temperature:
+                        0.2
+                )
+            )
+
+        XCTAssertEqual(
+            value.name,
+            "Forest Study"
+        )
+        XCTAssertEqual(
+            value.roles,
+            [
+                .init(
+                    colorIndex: 0,
+                    role: "primary"
+                )
+            ]
+        )
+
+        let captured =
+            try XCTUnwrap(
+                await bridge
+                .requestJSON()
+            )
+        let data =
+            try XCTUnwrap(
+                captured.data(
+                    using: .utf8
+                )
+            )
+        let object =
+            try XCTUnwrap(
+                JSONSerialization
+                    .jsonObject(
+                        with: data
+                    )
+                    as? [String: Any]
+            )
+        let structured =
+            try XCTUnwrap(
+                object[
+                    "structuredSchema"
+                ]
+                as? [String: Any]
+            )
+
+        XCTAssertEqual(
+            structured["name"]
+                as? String,
+            "palette_result"
+        )
+        XCTAssertEqual(
+            structured["strict"]
+                as? Bool,
+            true
+        )
+        XCTAssertTrue(
+            (
+                structured[
+                    "schemaJSON"
+                ]
+                as? String
+                ?? ""
+            )
+            .contains(
+                "\"additionalProperties\":false"
+            )
+        )
+
+        let messages =
+            try XCTUnwrap(
+                object["messages"]
+                    as? [[String: Any]]
+            )
+        XCTAssertEqual(
+            messages.map {
+                $0["role"]
+                    as? String
+            },
+            [
+                "system",
+                "user"
+            ]
+        )
+        XCTAssertEqual(
+            messages.first?[
+                "content"
+            ] as? String,
+            "Use only supplied facts."
+        )
+    }
+}
