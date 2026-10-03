@@ -10,6 +10,7 @@ DEST_DIR="$TMP_DIR/destination"
 mkdir -p "$SOURCE_DIR/nested" "$DEST_DIR"
 
 printf "fixture\n" > "$SOURCE_DIR/nested/Test.aimodel"
+printf "source readme must not win\n" > "$SOURCE_DIR/README.md"
 cat > "$SOURCE_DIR/aicorekit-model-profile.json" <<'EOF'
 {
   "model": "tests/fixture",
@@ -31,5 +32,6 @@ printf "stale\n" > "$DEST_DIR/stale.txt"
 [ -f "$DEST_DIR/README.md" ]
 [ ! -e "$DEST_DIR/stale.txt" ]
 grep -q "keep me" "$DEST_DIR/README.md"
+! grep -q "source readme must not win" "$DEST_DIR/README.md"
 
 echo "Local model provisioning fixture passed."
