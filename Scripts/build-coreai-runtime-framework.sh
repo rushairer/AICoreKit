@@ -64,6 +64,39 @@ rm -rf "$DERIVED_DATA"
 
 (
   cd "$RUNTIME_DIR"
+
+  # This xcodebuild runs from inside a host target build phase. Do not let
+  # target-specific settings from the outer build redirect the nested build
+  # back into the host's Intermediates.noindex tree or lower the runtime minOS.
+  unset ACTION
+  unset ARCHS
+  unset BUILD_DIR
+  unset BUILD_ROOT
+  unset BUILT_PRODUCTS_DIR
+  unset CONFIGURATION
+  unset CONFIGURATION_BUILD_DIR
+  unset CURRENT_ARCH
+  unset DERIVED_FILE_DIR
+  unset DWARF_DSYM_FOLDER_PATH
+  unset EFFECTIVE_PLATFORM_NAME
+  unset IPHONEOS_DEPLOYMENT_TARGET
+  unset NATIVE_ARCH
+  unset NATIVE_ARCH_ACTUAL
+  unset OBJROOT
+  unset ONLY_ACTIVE_ARCH
+  unset PLATFORM_NAME
+  unset PRODUCT_NAME
+  unset PROJECT_TEMP_DIR
+  unset SDK_NAME
+  unset SDKROOT
+  unset SOURCE_PACKAGES_DIR_PATH
+  unset SUPPORTED_PLATFORMS
+  unset TARGET_BUILD_DIR
+  unset TARGET_NAME
+  unset TARGET_TEMP_DIR
+  unset TARGETED_DEVICE_FAMILY
+  unset TEMP_DIR
+
   xcodebuild \
     -scheme "$FRAMEWORK_NAME" \
     -configuration "$CONFIGURATION_NAME" \
