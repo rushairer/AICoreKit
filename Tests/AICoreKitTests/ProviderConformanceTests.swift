@@ -100,6 +100,7 @@ final class ProviderConformanceTests: XCTestCase {
             coreAI.capabilities,
             [
                 .textGeneration,
+                .structuredGeneration,
                 .localExecution,
                 .privacyPreferred
             ]
