@@ -5802,10 +5802,12 @@ extension AICoreKitTests {
             ]
         )
 
+        let capturedRequestJSON =
+            await bridge
+            .requestJSON()
         let captured =
             try XCTUnwrap(
-                await bridge
-                .requestJSON()
+                capturedRequestJSON
             )
         let data =
             try XCTUnwrap(
