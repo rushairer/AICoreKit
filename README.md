@@ -91,7 +91,7 @@ Provider credentials are injected through protocols. AICoreKit does not persist 
 
 The root package remains usable by lower-minimum hosts. `AIProviderCoreAI` communicates through a stable C ABI resolved dynamically.
 
-Apps that actually embed `AICoreKitCoreAIRuntime.framework` should additionally depend on the `AIProviderCoreAIWeakLink` product and use `WeakLinkedCoreAIBridge`. That optional module carries the tiny weak C reference needed to preserve the runtime framework load command when dead stripping is enabled.
+Apps that actually embed `AICoreKitCoreAIRuntime.framework` should additionally depend on the `AIProviderCoreAIWeakLink` product and use `WeakLinkedCoreAIBridge`. The host embeds the runtime but does not link it. On supported OS versions the bridge loads the embedded framework on demand with `dlopen` and resolves the stable `AICKCoreAI*` ABI with `dlsym`, so lower-minimum hosts and transitive extension targets do not inherit a runtime link requirement.
 
 The higher-minimum implementation lives in the nested `Runtime/CoreAIRuntime` package, which requires iOS/macOS 27 and Apple's `CoreAILM` runtime. Model assets are supplied by the host and are not bundled in AICoreKit.
 
