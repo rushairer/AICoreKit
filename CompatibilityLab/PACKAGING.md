@@ -32,7 +32,7 @@ The lower-minimum host must not import the `AICoreKitCoreAIRuntime` Swift module
 
 A pure `dlsym` implementation does not create a link-time reference to the runtime framework. When dead stripping of unused dynamic libraries is enabled, the final host binary can lose the weak framework load command entirely.
 
-`AICoreWeakBridgeShim` carries one deliberately tiny weak import of `AICKCoreAIIsAvailable` for CompatibilityLab packaging tests only. Product consumers do not depend on this shim. `AIProviderCoreAIWeakLink` uses `WeakLinkedCoreAIBridge`, which resolves the shared `AICKCoreAI*` ABI dynamically through `dlsym`; therefore extensions and other transitive consumers do not inherit an undefined Core AI runtime symbol. Host app targets that embed the runtime still declare the final weak framework load in their own Mach-O packaging configuration.
+`AICoreWeakBridgeShim` carries one deliberately tiny weak import of `AICKCoreAIIsAvailable` for CompatibilityLab packaging tests only. Product consumers do not depend on this shim. `AIProviderCoreAIWeakLink` uses `WeakLinkedCoreAIBridge`, which resolves the shared `AICKCoreAI*` ABI dynamically through `dlsym`; therefore extensions and other transitive consumers do not inherit an undefined Core AI runtime symbol. Host app targets embed the runtime without linking it. `WeakLinkedCoreAIBridge` opens the embedded framework on demand and resolves the ABI dynamically.
 
 Generation and lifecycle operations still resolve through the stable C ABI.
 
@@ -61,8 +61,8 @@ A production host must:
 1. Embed `AICoreKitCoreAIRuntime.framework` in the app's Frameworks directory.
 2. Sign the embedded framework as part of normal app signing.
 3. Keep `@executable_path/Frameworks` in `LD_RUNPATH_SEARCH_PATHS`.
-4. Link the runtime framework weakly, not strongly.
-5. Add the `AIProviderCoreAIWeakLink` product and use `WeakLinkedCoreAIBridge`.
+4. Embed and sign the runtime framework, but do not add it to the host link phase.
+5. Add the `AIProviderCoreAIWeakLink` product and use `WeakLinkedCoreAIBridge` for on-demand loading.
 6. Keep all runtime calls behind availability checks.
 
 For an Xcode application target, the effective linker invocation must produce `LC_LOAD_WEAK_DYLIB` for the runtime framework. A typical linker flag is:
