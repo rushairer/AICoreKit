@@ -319,22 +319,28 @@ extension AICoreKitTests {
             store.profile,
             profile
         )
+        let initialState =
+            await store.refreshState()
         XCTAssertEqual(
-            await store.refreshState(),
+            initialState,
             .notPrepared
         )
 
         try await store.ensureReady()
 
+        let readyState =
+            await store.refreshState()
         XCTAssertEqual(
-            await store.refreshState(),
+            readyState,
             .ready
         )
 
         try await store.unload()
 
+        let unloadedState =
+            await store.refreshState()
         XCTAssertEqual(
-            await store.refreshState(),
+            unloadedState,
             .notPrepared
         )
     }
@@ -4151,9 +4157,11 @@ extension AICoreKitTests {
             counts.load,
             1
         )
-        XCTAssertEqual(
+        let currentState =
             await controller
-                .currentState(),
+            .currentState()
+        XCTAssertEqual(
+            currentState,
             .ready
         )
     }
