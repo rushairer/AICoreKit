@@ -1,5 +1,6 @@
 import AICore
 import Darwin
+import Foundation
 
 public struct WeakSymbolCoreAIBridge: CoreAIModelLifecycleBridge {
     public let availabilitySymbol: String
@@ -9,6 +10,8 @@ public struct WeakSymbolCoreAIBridge: CoreAIModelLifecycleBridge {
     public let loadSymbol: String
     public let unloadSymbol: String
     public let clearPreparationCacheSymbol: String
+    private let runtimeLibrary:
+        CoreAIDynamicLibrary
 
     public init(
         availabilitySymbol: String = "AICKCoreAIIsAvailable",
@@ -18,7 +21,8 @@ public struct WeakSymbolCoreAIBridge: CoreAIModelLifecycleBridge {
         loadSymbol: String = "AICKCoreAILoad",
         unloadSymbol: String = "AICKCoreAIUnload",
         clearPreparationCacheSymbol: String =
-            "AICKCoreAIClearPreparationCache"
+            "AICKCoreAIClearPreparationCache",
+        runtimeLibraryPath: String? = nil
     ) {
         self.availabilitySymbol = availabilitySymbol
         self.generateSymbol = generateSymbol
@@ -28,6 +32,11 @@ public struct WeakSymbolCoreAIBridge: CoreAIModelLifecycleBridge {
         self.unloadSymbol = unloadSymbol
         self.clearPreparationCacheSymbol =
             clearPreparationCacheSymbol
+        runtimeLibrary =
+            CoreAIDynamicLibrary(
+                path:
+                    runtimeLibraryPath
+            )
     }
 
     public func availability() async -> AIAvailability {
@@ -244,18 +253,12 @@ public struct WeakSymbolCoreAIBridge: CoreAIModelLifecycleBridge {
         as type: T.Type
     ) -> T? {
         guard
-            let handle =
-                dlopen(nil, RTLD_LAZY)
-        else {
-            return nil
-        }
-        defer {
-            dlclose(handle)
-        }
-
-        guard
             let symbol =
-                dlsym(handle, name)
+                runtimeLibrary
+                .symbol(
+                    named:
+                        name
+                )
         else {
             return nil
         }
@@ -264,6 +267,93 @@ public struct WeakSymbolCoreAIBridge: CoreAIModelLifecycleBridge {
             symbol,
             to: type
         )
+    }
+}
+
+private final class CoreAIDynamicLibrary:
+    @unchecked Sendable
+{
+    private let path: String?
+    private let lock =
+        NSLock()
+    private var handle:
+        UnsafeMutableRawPointer?
+    private var didAttemptLoad =
+        false
+
+    init(
+        path: String?
+    ) {
+        self.path =
+            path
+    }
+
+    deinit {
+        guard
+            let handle,
+            path != nil
+        else {
+            return
+        }
+
+        dlclose(
+            handle
+        )
+    }
+
+    func symbol(
+        named name: String
+    ) -> UnsafeMutableRawPointer? {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+
+        guard
+            let handle =
+                loadedHandle()
+        else {
+            return nil
+        }
+
+        return dlsym(
+            handle,
+            name
+        )
+    }
+
+    private func loadedHandle()
+        -> UnsafeMutableRawPointer?
+    {
+        if let handle {
+            return handle
+        }
+
+        guard
+            !didAttemptLoad
+        else {
+            return nil
+        }
+
+        didAttemptLoad =
+            true
+
+        if let path {
+            handle =
+                dlopen(
+                    path,
+                    RTLD_NOW
+                    | RTLD_LOCAL
+                )
+        } else {
+            handle =
+                dlopen(
+                    nil,
+                    RTLD_LAZY
+                )
+        }
+
+        return handle
     }
 }
 
