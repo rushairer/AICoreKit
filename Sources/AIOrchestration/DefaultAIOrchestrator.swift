@@ -15,11 +15,12 @@ public actor DefaultAIOrchestrator {
         fallbackPolicy: AIFallbackPolicy = .enabled
     ) async throws -> AIResponse {
         let providers = await registry.allProviders()
-        var candidates = await router.candidates(
+        let resolution = await router.resolve(
             from: providers,
             requiredCapabilities: request.requiredCapabilities,
             preference: request.executionPreference
         )
+        var candidates = resolution.candidates
 
         if !fallbackPolicy.allowsFallback {
             candidates = Array(candidates.prefix(1))
@@ -28,6 +29,9 @@ public actor DefaultAIOrchestrator {
         }
 
         guard !candidates.isEmpty else {
+            if let reason = resolution.firstUnavailableReason {
+                throw AIError.unavailable(reason)
+            }
             throw AIError.exhaustedProviders
         }
 
@@ -67,11 +71,12 @@ public actor DefaultAIOrchestrator {
             requiredCapabilities.insert(.toolCalling)
         }
 
-        var candidates = await router.candidates(
+        let resolution = await router.resolve(
             from: providers,
             requiredCapabilities: requiredCapabilities,
             preference: request.executionPreference
         )
+        var candidates = resolution.candidates
 
         if !fallbackPolicy.allowsFallback {
             candidates = Array(candidates.prefix(1))
@@ -181,11 +186,12 @@ public actor DefaultAIOrchestrator {
         fallbackPolicy: AIFallbackPolicy = .enabled
     ) async throws -> AIResponseStream {
         let providers = await registry.allProviders()
-        var candidates = await router.candidates(
+        let resolution = await router.resolve(
             from: providers,
             requiredCapabilities: request.requiredCapabilities,
             preference: request.executionPreference
         )
+        var candidates = resolution.candidates
 
         if !fallbackPolicy.allowsFallback {
             candidates = Array(candidates.prefix(1))
@@ -194,6 +200,9 @@ public actor DefaultAIOrchestrator {
         }
 
         guard let provider = candidates.first else {
+            if let reason = resolution.firstUnavailableReason {
+                throw AIError.unavailable(reason)
+            }
             throw AIError.exhaustedProviders
         }
         return provider.stream(request)
