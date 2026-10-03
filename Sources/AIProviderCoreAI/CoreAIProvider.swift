@@ -51,6 +51,7 @@ public struct CoreAIProvider:
     public var capabilities: AICapabilities {
         [
             .textGeneration,
+            .structuredGeneration,
             .localExecution,
             .privacyPreferred
         ]
@@ -229,7 +230,9 @@ public struct CoreAIProvider:
                 temperature:
                     request.temperature,
                 metadata:
-                    request.metadata
+                    request.metadata,
+                structuredSchema:
+                    nil
             )
 
         let requestData: Data
@@ -304,6 +307,204 @@ public struct CoreAIProvider:
                         .outputTokens
                 )
         )
+    }
+
+    public func generateStructured<
+        Output: Decodable & Sendable
+    >(
+        _ request:
+            AIStructuredRequest<Output>
+    ) async throws -> Output {
+        guard
+            capabilities.satisfies(
+                request.requiredCapabilities
+            )
+        else {
+            throw AIError
+                .unsupportedCapability
+        }
+
+        guard
+            let schema =
+                request.schema
+        else {
+            throw AIError.invalidRequest(
+                "Core AI structured generation requires a JSON schema"
+            )
+        }
+
+        let currentAvailability =
+            await availability()
+        guard
+            currentAvailability
+                == .available
+        else {
+            throw AIError.unavailable(
+                unavailableReason(
+                    from:
+                        currentAvailability
+                )
+            )
+        }
+
+        if let lifecycleController {
+            try await lifecycleController
+                .ensureReady()
+        }
+
+        let resource =
+            try await requiredModelResource(
+                requireExistingFile: true
+            )
+
+        let schemaJSON: String
+        do {
+            schemaJSON =
+                try schema.schema
+                .jsonString(
+                    sortedKeys: false
+                )
+        } catch let error as AIError {
+            throw error
+        } catch {
+            throw AIError.invalidRequest(
+                "Failed to encode Core AI structured schema"
+            )
+        }
+
+        var messages:
+            [CoreAIWireMessage] = []
+
+        let instructions =
+            request.instructions
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+        if !instructions.isEmpty {
+            messages.append(
+                CoreAIWireMessage(
+                    role: "system",
+                    content:
+                        request.instructions
+                )
+            )
+        }
+
+        messages.append(
+            CoreAIWireMessage(
+                role: "user",
+                content:
+                    request.input
+            )
+        )
+
+        let wireRequest =
+            CoreAIWireRequest(
+                messages:
+                    messages,
+                maxOutputTokens:
+                    request.maxOutputTokens,
+                temperature:
+                    request.temperature,
+                metadata:
+                    request.metadata,
+                structuredSchema:
+                    CoreAIWireStructuredSchema(
+                        name:
+                            schema.name,
+                        description:
+                            schema.description,
+                        schemaJSON:
+                            schemaJSON,
+                        strict:
+                            schema.strict
+                    )
+            )
+
+        let requestData: Data
+        do {
+            requestData =
+                try JSONEncoder()
+                .encode(
+                    wireRequest
+                )
+        } catch {
+            throw AIError.invalidRequest(
+                "Failed to encode Core AI structured request"
+            )
+        }
+
+        let invocation =
+            await bridge.generate(
+                requestJSON:
+                    String(
+                        decoding:
+                            requestData,
+                        as: UTF8.self
+                    ),
+                modelPath:
+                    resource.path
+            )
+
+        try throwIfNeeded(
+            invocation.status,
+            operation:
+                "structured generation"
+        )
+
+        guard
+            let responseJSON =
+                invocation.responseJSON,
+            let responseData =
+                responseJSON.data(
+                    using: .utf8
+                )
+        else {
+            throw AIError.decodingFailure(
+                "Core AI bridge returned an empty structured response"
+            )
+        }
+
+        let wireResponse:
+            CoreAIWireResponse
+        do {
+            wireResponse =
+                try JSONDecoder()
+                .decode(
+                    CoreAIWireResponse.self,
+                    from:
+                        responseData
+                )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
+
+        guard
+            let outputData =
+                wireResponse.text
+                .data(
+                    using: .utf8
+                )
+        else {
+            throw AIError.decodingFailure(
+                "Core AI structured response was not UTF-8"
+            )
+        }
+
+        do {
+            return try JSONDecoder()
+                .decode(
+                    Output.self,
+                    from:
+                        outputData
+                )
+        } catch {
+            throw AIError.decodingFailure(
+                error.localizedDescription
+            )
+        }
     }
 
     private func requiredModelResource(
