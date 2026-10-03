@@ -89,6 +89,9 @@ public actor DefaultAIOrchestrator {
         }
 
         guard !candidates.isEmpty else {
+            if let reason = resolution.firstUnavailableReason {
+                throw AIError.unavailable(reason)
+            }
             throw AIError.exhaustedProviders
         }
 
