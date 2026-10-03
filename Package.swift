@@ -107,6 +107,7 @@ let package = Package(
                 "AIDiagnostics",
                 "AIProviderApple",
                 "AIProviderCoreAI",
+                "AIProviderCoreAIWeakLink",
                 "AIProviderOpenAICompatible",
                 "AIProviderAnthropic",
                 "AIProviderGemini",
