@@ -111,12 +111,12 @@ See `CompatibilityLab/CORE_AI_ABI.md` and `Runtime/CoreAIRuntime/README.md` for 
 
 ## Installation
 
-AICoreKit is not tagged for production use yet. During early development, depend on the `main` branch only for experiments.
+AICoreKit is not tagged for production use yet. Experiments may follow `main`, but production consumers should pin an exact reviewed revision until the first stable tag so runtime/tooling changes cannot move underneath a release candidate.
 
 ```swift
 .package(
     url: "https://github.com/rushairer/AICoreKit.git",
-    branch: "main"
+    revision: "<reviewed-commit-sha>"
 )
 ```
 
