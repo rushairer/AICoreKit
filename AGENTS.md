@@ -47,3 +47,12 @@ Every provider should receive contract tests for capability declaration, availab
 - Add a new public primitive only when at least one real consumer needs it and the behavior is product-neutral.
 - Keep retry prompts, domain schemas, language policy, semantic validation, and product UX in the consuming application unless the contract is genuinely provider/runtime-wide.
 - `AIResponse.validatedCompletedText()` is the shared completion boundary for plain-text responses; consumers still own schema, language, and domain validation after that boundary.
+
+
+## Reference-model policy
+
+- Qwen3-0.6B is the current Core AI compatibility fixture, not a declaration that it is the newest, fastest, or highest-quality model.
+- Do not change the shared reference model merely because a newer/larger model becomes available. A reference-model change needs a compatibility/testing reason and evidence.
+- Product model selection belongs to the consumer and should be based on measured latency, memory, language/output quality, repair rate, and device budget.
+- If a consumer wants Qwen3-1.7B, another Qwen generation, SmolLM, or another supported model, prefer an explicit consumer override through provisioning/profile configuration over changing AICoreKit defaults globally.
+- Read `docs/STABILIZATION.md` before adding public API. If no real consumer demonstrates a product-neutral gap, keep the change in the consumer repository.
