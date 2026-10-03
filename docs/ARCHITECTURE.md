@@ -19,7 +19,7 @@ The provider depends on two injected abstractions:
 - `CoreAIBridge` — availability and generation across the runtime boundary.
 - `CoreAIModelResourceProviding` — host-owned model resource resolution.
 
-The live iOS implementation will use the weak C ABI documented under `CompatibilityLab/`. The higher-minimum Swift runtime stays isolated in an iOS 27-only framework target.
+The production iOS implementation uses the weak C ABI documented under `CompatibilityLab/`. The higher-minimum Swift runtime stays isolated in the shared iOS 27-only `AICoreKitCoreAIRuntime.framework`, while lower-minimum hosts access it through `AIProviderCoreAIWeakLink`.
 
 ## Non-goals
 
@@ -130,9 +130,9 @@ AICoreKit separates model identity/lifecycle from product distribution policy.
 
 `CoreAIDirectoryModelResourceProvider` is the reusable resource-discovery layer for Core AI model directories. It accepts either a raw identifier or a `CoreAIModelProfile`, validates that the directory exists and, by default, that it contains at least one `.aimodel` descendant before exposing a `CoreAIModelResource`.
 
-The package also ships reusable export/install scripts under `Scripts/`. These cover the mechanics proven in ColorCamera: pinned `coreai-models` export, model-directory validation, profile emission, and safe copying into a product-owned resource directory.
+The package also ships reusable model tooling under `Scripts/`. `provision-coreai-model.sh` is the preferred host integration entry point: it composes the pinned `coreai-models` export with validated installation into a product-owned resource directory. `export-coreai-model.sh` and `install-coreai-model-resource.sh` remain the lower-level building blocks. Product wrappers should delegate to these shared tools rather than copy their implementation.
 
-AICoreKit intentionally does not decide whether an application bundles a model, downloads it on demand, or omits it. That is a product distribution policy. Once a directory is available, preparation, process loading, unload, preparation-cache clearing, provider execution, and device diagnostics are shared infrastructure.
+AICoreKit intentionally does not decide whether an application bundles a model, downloads it on demand, or omits it. That is a product distribution policy. However, a consumer that claims bundled/local inference must provide a reproducible provisioning path and must not treat a no-model build as inference validation. Once a directory is available, preparation, process loading, unload, preparation-cache clearing, provider execution, and device diagnostics are shared infrastructure. See `LOCAL_MODELS.md` for the completion contract.
 
 
 ### Persistent resource lifecycle capability
