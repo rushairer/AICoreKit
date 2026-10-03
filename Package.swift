@@ -44,8 +44,7 @@ let package = Package(
         .target(
             name: "AIProviderCoreAIWeakLink",
             dependencies: [
-                "AIProviderCoreAI",
-                "AICoreWeakBridgeShim"
+                "AIProviderCoreAI"
             ]
         ),
         .target(
