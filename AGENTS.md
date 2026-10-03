@@ -28,3 +28,22 @@ AICoreKit is shared AI infrastructure. Keep product-specific domain logic out of
 ## Testing
 
 Every provider should receive contract tests for capability declaration, availability mapping, cancellation, errors, and response normalization. Routing and fallback behavior must be deterministic and covered independently of real network/model calls.
+
+
+## Local model integration
+
+- Read `docs/LOCAL_MODELS.md` before changing any Core AI local-model consumer.
+- A host build that succeeds without a real model resource proves graceful degradation only. Never report local inference as complete until the model is provisioned and a signed supported device executes a real generation.
+- Use `Scripts/provision-coreai-model.sh` as the preferred export + install workflow. Product repositories may keep thin wrappers that choose destination/model names, but must not duplicate AICoreKit export/copy/validation logic.
+- Keep generated model assets out of this repository. Host repositories must document their resource destination, git-ignore policy, and exact provisioning command.
+- Preserve the distinction between installed model resource, persistent preparation, current-process load, generation readiness, unload, and preparation-cache clearing.
+- Reuse `CoreAIModelProfile`, `CoreAIModelSettingsStore`, `CoreAIModelLifecycleController`, and `CoreAIDirectoryModelResourceProvider`; do not create product-specific parallel lifecycle state machines.
+- Lower-minimum host targets must not import `CoreAILM` / `CoreAILanguageModels` directly. Keep the iOS/macOS 27 runtime behind the shared weak-link/ABI boundary.
+- If the current agent environment cannot run Xcode 27 / `uv` / signed-device qualification, leave the exact provisioning command and mark the device-validation gate open. Do not substitute a no-model build and call the integration finished.
+
+## Stabilization policy
+
+- AICoreKit is in pre-1.0 stabilization. Prefer fixes, contract tests, documentation, and evidence from real consumers over adding new abstractions.
+- Add a new public primitive only when at least one real consumer needs it and the behavior is product-neutral.
+- Keep retry prompts, domain schemas, language policy, semantic validation, and product UX in the consuming application unless the contract is genuinely provider/runtime-wide.
+- `AIResponse.validatedCompletedText()` is the shared completion boundary for plain-text responses; consumers still own schema, language, and domain validation after that boundary.
