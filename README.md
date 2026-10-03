@@ -130,6 +130,8 @@ swift test
 
 See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for platform minimums, provider capability support, and the conformance contract.
 
+See [docs/CONSUMER_INTEGRATION.md](docs/CONSUMER_INTEGRATION.md) for the production-app integration checklist.
+
 See [docs/LOCAL_MODELS.md](docs/LOCAL_MODELS.md) for Core AI model export/provisioning, host resource setup, lifecycle rules, and signed-device completion criteria.
 
 See [docs/VERSIONING.md](docs/VERSIONING.md) for the SemVer, API stability, deprecation, and Core AI ABI policy.
