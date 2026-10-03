@@ -194,6 +194,17 @@ enum CoreAIStructuredSchemaCompiler {
                         field: "maximum"
                     )
 
+                if
+                    let minimum,
+                    let maximum,
+                    minimum > maximum
+                {
+                    throw RuntimeStructuredSchemaError
+                        .invalidSchema(
+                            "minimum exceeds maximum"
+                        )
+                }
+
                 return DynamicGenerationSchema(
                     type: Int.self,
                     guides:
@@ -226,6 +237,17 @@ enum CoreAIStructuredSchemaCompiler {
                         object["maximum"],
                         field: "maximum"
                     )
+
+                if
+                    let minimum,
+                    let maximum,
+                    minimum > maximum
+                {
+                    throw RuntimeStructuredSchemaError
+                        .invalidSchema(
+                            "minimum exceeds maximum"
+                        )
+                }
 
                 return DynamicGenerationSchema(
                     type: Double.self,
