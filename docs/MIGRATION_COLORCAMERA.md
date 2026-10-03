@@ -222,3 +222,8 @@ Cloud-provider status:
 The product-specific `ColorCameraCoreAI` generation/repair runtime remains intentionally in place. The shared library owns lifecycle and provider infrastructure, not ColorCamera's palette domain.
 
 No new full signed archive/CI evidence is claimed by this update. Remaining production qualification still includes signed-device lower-OS launch, iOS 27 real inference under repeated use, memory/thermal/cancellation observation, and Release/distribution validation when build capacity is available.
+
+
+## Production validation update
+
+ColorCamera has now passed signed-device validation for both the Qwen/Core AI local path and configured cloud Color Intelligence path. The product keeps palette schema/language/role validation and its bounded repair retry, while AICoreKit owns generic response-completion validation through `AIResponse.validatedCompletedText()`. Product code should reject incomplete provider responses before domain validation rather than treating non-empty text as success.
