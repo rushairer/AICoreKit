@@ -32,7 +32,7 @@ Every provider should receive contract tests for capability declaration, availab
 
 ## Local model integration
 
-- Read `docs/LOCAL_MODELS.md` before changing any Core AI local-model consumer.
+- Read `docs/CONSUMER_INTEGRATION.md` for any production consumer integration and `docs/LOCAL_MODELS.md` before changing any Core AI local-model consumer.
 - A host build that succeeds without a real model resource proves graceful degradation only. Never report local inference as complete until the model is provisioned and a signed supported device executes a real generation.
 - Use `Scripts/provision-coreai-model.sh` as the preferred export + install workflow. Product repositories may keep thin wrappers that choose destination/model names, but must not duplicate AICoreKit export/copy/validation logic.
 - Keep generated model assets out of this repository. Host repositories must document their resource destination, git-ignore policy, and exact provisioning command.
