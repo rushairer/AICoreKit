@@ -18,6 +18,8 @@ jobs:
         run: swift test
       - name: Build Swift 5 lifecycle consumer fixture
         run: swift build --package-path CompatibilityLab/Swift5LifecycleConsumer
+      - name: Test local model provisioning workflow
+        run: /bin/sh ./Scripts/tests/test-local-model-provisioning.sh
 
   coreai-runtime-build:
     runs-on: xcode-27
