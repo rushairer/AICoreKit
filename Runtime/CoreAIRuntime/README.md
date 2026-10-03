@@ -22,7 +22,7 @@ The intended production packaging is:
 Host app (iOS 17/26+)
   -> AICoreKit / AIProviderCoreAIWeakLink
   -> WeakLinkedCoreAIBridge
-  -> weak-linked AICoreKitCoreAIRuntime.framework (iOS 27+)
+  -> embedded AICoreKitCoreAIRuntime.framework (iOS 27+, loaded on demand)
   -> CoreAILM / Core AI
 ```
 
@@ -51,8 +51,8 @@ The script writes `AICoreKitCoreAIRuntime.framework` into `BUILT_PRODUCTS_DIR`. 
 
 1. references that framework from `BUILT_PRODUCTS_DIR`;
 2. links it with the Xcode **Weak** attribute;
-3. embeds and signs it in the app Frameworks directory;
-4. depends on the root-package `AIProviderCoreAIWeakLink` product and uses `WeakLinkedCoreAIBridge`.
+3. embeds and signs it in the app Frameworks directory without adding it to the host link phase;
+4. depends on the root-package `AIProviderCoreAIWeakLink` product and uses `WeakLinkedCoreAIBridge`, which `dlopen`s the embedded runtime only on supported OS versions.
 
 The final weak-link and embed declarations remain properties of the host application target because only the host owns the final Mach-O and app bundle. The runtime implementation, ABI, builder, verifier, and bridge remain AICoreKit responsibilities.
 
