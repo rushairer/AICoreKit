@@ -45,11 +45,12 @@ MARKER="$OUTPUT_DIR/.$FRAMEWORK_NAME.build-info"
 REVISION=$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)
 EXPECTED_MARKER="$REVISION|$CONFIGURATION_NAME|$PLATFORM"
 
-if [ -f "$DEST_FRAMEWORK/$FRAMEWORK_NAME" ]   && [ -f "$MARKER" ]   && [ "$(cat "$MARKER")" = "$EXPECTED_MARKER" ]
-then
-  if "$VERIFY_SCRIPT" "$DEST_FRAMEWORK" >/dev/null 2>&1; then
-    echo "Core AI runtime is already current: $DEST_FRAMEWORK"
-    exit 0
+if [ -f "$DEST_FRAMEWORK/$FRAMEWORK_NAME" ]; then
+  if [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$EXPECTED_MARKER" ]; then
+    if "$VERIFY_SCRIPT" "$DEST_FRAMEWORK" >/dev/null 2>&1; then
+      echo "Core AI runtime is already current: $DEST_FRAMEWORK"
+      exit 0
+    fi
   fi
 fi
 
@@ -61,7 +62,10 @@ fi
 
 rm -rf "$DERIVED_DATA"
 
-xcodebuild   -packagePath "$RUNTIME_DIR"   -scheme "$FRAMEWORK_NAME"   -configuration "$CONFIGURATION_NAME"   -destination "$DESTINATION"   -sdk "$SDK"   -derivedDataPath "$DERIVED_DATA"   CODE_SIGNING_ALLOWED=NO   CODE_SIGNING_REQUIRED=NO   build
+(
+  cd "$RUNTIME_DIR"
+  xcodebuild -scheme "$FRAMEWORK_NAME" -configuration "$CONFIGURATION_NAME" -destination "$DESTINATION" -sdk "$SDK" -derivedDataPath "$DERIVED_DATA" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+)
 
 BUILT_FRAMEWORK="$DERIVED_DATA/Build/Products/${CONFIGURATION_NAME}-${PRODUCTS_SUFFIX}/PackageFrameworks/$FRAMEWORK_NAME.framework"
 
