@@ -1,5 +1,19 @@
 # Qwen3-0.6B Core AI fixture
 
+## Preferred provision command
+
+For a host application that bundles Qwen3-0.6B, prefer the single AICoreKit provisioning command:
+
+```bash
+./Scripts/provision-coreai-model.sh \
+  --destination /path/to/Product/Resources/ProductLocalModel \
+  --output-name ProductLocalModel
+```
+
+This performs export + install and then prints the remaining host-app gates. If an export already exists, pass `--source /path/to/exported-model`.
+
+A host build that omits the model is useful for testing graceful degradation, but it is not a successful local-model qualification.
+
 AICoreKit does not redistribute Qwen model assets. This fixture documents how to create a local Core AI resource bundle and inject it into `CoreAIProvider`.
 
 ## Export for iOS
@@ -56,9 +70,9 @@ The runtime framework must already be embedded and weak-linked by the host. Do n
 Do not commit generated model bundles to AICoreKit. Product applications decide whether assets are bundled, downloaded on demand, or omitted entirely.
 
 
-## Install into a product resource directory
+## Install an existing export only
 
-For bundled-model products, use the shared install helper rather than duplicating copy/validation logic:
+For bundled-model products that already have an exported directory, use the shared install helper rather than duplicating copy/validation logic:
 
 ```bash
 ./Scripts/install-coreai-model-resource.sh \
@@ -67,3 +81,6 @@ For bundled-model products, use the shared install helper rather than duplicatin
 ```
 
 The helper preserves an existing `.gitkeep` and verifies that at least one `.aimodel` exists after the copy. Products still own the destination path and whether the model is bundled, downloaded, or omitted.
+
+
+For the complete integration and agent completion checklist, see `docs/LOCAL_MODELS.md`.
