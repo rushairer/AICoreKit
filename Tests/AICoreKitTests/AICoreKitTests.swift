@@ -5533,3 +5533,111 @@ extension AICoreKitTests {
         )
     }
 }
+
+
+private struct UnavailableRoutingProvider: AIProvider {
+    let id: AIProviderID
+    let capabilities: AICapabilities
+    let reason: AIUnavailabilityReason
+
+    var displayName: String {
+        id.rawValue
+    }
+
+    func availability() async -> AIAvailability {
+        .unavailable(reason)
+    }
+
+    func generate(
+        _ request: AIRequest
+    ) async throws -> AIResponse {
+        XCTFail("Unavailable provider should not be asked to generate.")
+        throw AIError.unavailable(reason)
+    }
+}
+
+extension AICoreKitTests {
+    func testOrchestratorPreservesRemoteAuthenticationUnavailability() async {
+        let provider =
+            UnavailableRoutingProvider(
+                id: "remote-auth",
+                capabilities: [
+                    .textGeneration,
+                    .remoteExecution
+                ],
+                reason:
+                    .authenticationMissing
+            )
+        let registry =
+            AIProviderRegistry(
+                providers: [provider]
+            )
+        let orchestrator =
+            DefaultAIOrchestrator(
+                registry: registry
+            )
+
+        do {
+            _ = try await orchestrator.respond(
+                to:
+                    AIRequest(
+                        messages: [
+                            .user("hello")
+                        ],
+                        executionPreference:
+                            .remoteOnly
+                    )
+            )
+            XCTFail(
+                "Expected remote authentication unavailability."
+            )
+        } catch let error as AIError {
+            XCTAssertEqual(
+                error,
+                .unavailable(
+                    .authenticationMissing
+                )
+            )
+        } catch {
+            XCTFail(
+                "Unexpected error: \(error)"
+            )
+        }
+    }
+
+    func testOrchestratorStillReportsExhaustedProvidersWhenNoProviderMatches() async {
+        let registry =
+            AIProviderRegistry(
+                providers: []
+            )
+        let orchestrator =
+            DefaultAIOrchestrator(
+                registry: registry
+            )
+
+        do {
+            _ = try await orchestrator.respond(
+                to:
+                    AIRequest(
+                        messages: [
+                            .user("hello")
+                        ],
+                        executionPreference:
+                            .remoteOnly
+                    )
+            )
+            XCTFail(
+                "Expected exhausted providers."
+            )
+        } catch let error as AIError {
+            XCTAssertEqual(
+                error,
+                .exhaustedProviders
+            )
+        } catch {
+            XCTFail(
+                "Unexpected error: \(error)"
+            )
+        }
+    }
+}
