@@ -201,7 +201,7 @@ Do not move DSP into the language model.
 
 If MetronomePro adopts the Core AI runtime, reuse AICoreKit's generic Core AI boundary rather than cloning ColorCamera's product-specific C ABI. Product-specific model packaging/resource UX remains owned by MetronomePro.
 
-MetronomePro/26 currently use Apple Foundation Models for the On-device Practice Coach path. They do not yet embed `AICoreKitCoreAIRuntime.framework` or bundle a Qwen/Core AI model asset. A future Qwen integration should use AICoreKit `CoreAIModelProfile`, `CoreAIModelSettingsStore`, `CoreAIDirectoryModelResourceProvider`, and the product-neutral weak-link runtime rather than recreating ColorCamera's product-specific lifecycle façade.
+MetronomePro/26 now use Apple Foundation Models plus an optional Qwen3-0.6B Core AI provider for the On-device Practice Coach path. Both apps share AICoreKit `CoreAIModelProfile`, `CoreAIModelSettingsStore`, `CoreAIDirectoryModelResourceProvider`, and the product-neutral weak-link runtime. The iOS targets weak-link/embed `AICoreKitCoreAIRuntime.framework`; the remaining product gate is signed-device Practice Coach inference and result validation rather than runtime packaging.
 
 ## Cloud option
 
@@ -279,3 +279,8 @@ Practice session ends
 ```
 
 This directly advances the documented 1.8 AI Practice Coach direction while preserving the 1.6/1.7 factual foundations.
+
+
+## Result-validation requirement
+
+Practice Coach must not treat non-empty text as sufficient evidence of a successful generation. Consumers should call `AIResponse.validatedCompletedText()` first so truncated/blocked/failed responses fail closed, then apply Practice Coach-specific constraints. One bounded repair retry is acceptable for incomplete output; factual practice evidence remains immutable.
