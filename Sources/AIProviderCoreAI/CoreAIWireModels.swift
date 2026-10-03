@@ -5,6 +5,18 @@ struct CoreAIWireRequest: Encodable, Sendable {
     let maxOutputTokens: Int?
     let temperature: Double?
     let metadata: [String: String]
+    let structuredSchema:
+        CoreAIWireStructuredSchema?
+}
+
+struct CoreAIWireStructuredSchema:
+    Encodable,
+    Sendable
+{
+    let name: String
+    let description: String?
+    let schemaJSON: String
+    let strict: Bool
 }
 
 struct CoreAIWireMessage: Encodable, Sendable {
@@ -16,6 +28,16 @@ struct CoreAIWireMessage: Encodable, Sendable {
         role = message.role.rawValue
         content = message.content
         name = message.name
+    }
+
+    init(
+        role: String,
+        content: String,
+        name: String? = nil
+    ) {
+        self.role = role
+        self.content = content
+        self.name = name
     }
 }
 
