@@ -201,7 +201,15 @@ Do not move DSP into the language model.
 
 If MetronomePro adopts the Core AI runtime, reuse AICoreKit's generic Core AI boundary rather than cloning ColorCamera's product-specific C ABI. Product-specific model packaging/resource UX remains owned by MetronomePro.
 
-MetronomePro/26 now use Apple Foundation Models plus an optional Qwen3-0.6B Core AI provider for the On-device Practice Coach path. Both apps share AICoreKit `CoreAIModelProfile`, `CoreAIModelSettingsStore`, `CoreAIDirectoryModelResourceProvider`, and the product-neutral weak-link runtime. The iOS targets weak-link/embed `AICoreKitCoreAIRuntime.framework`; the remaining product gate is signed-device Practice Coach inference and result validation rather than runtime packaging.
+MetronomePro/26 now use Apple Foundation Models plus an optional Qwen3-0.6B Core AI provider for the On-device Practice Coach path. Both apps share AICoreKit `CoreAIModelProfile`, `CoreAIModelSettingsStore`, `CoreAIDirectoryModelResourceProvider`, and the product-neutral weak-link runtime. The iOS targets weak-link/embed `AICoreKitCoreAIRuntime.framework`.
+
+The missing operational step is explicit: the real Qwen resource must be provisioned into `Packages/PracticeCoachAI/Sources/PracticeCoachAI/Resources/MetronomeLocalModel` before the Qwen path can be device-qualified. The product wrapper is:
+
+```bash
+./Scripts/install_practice_coach_local_model.sh
+```
+
+That wrapper resolves the AICoreKit revision pinned by `PracticeCoachAI` and delegates export/install to AICoreKit `Scripts/provision-coreai-model.sh`. An existing exported model directory may be passed as the first positional argument. A no-model build is expected to degrade cleanly, but it is not evidence that Qwen inference works. See `LOCAL_MODELS.md`.
 
 ## Cloud option
 
@@ -216,9 +224,9 @@ Production credentials should normally be supplied through an application/server
 
 The user's practice evidence sent to a remote provider should be minimized to what is needed for the requested feature.
 
-## Migration status update — 2026-10-02
+## Migration status update — 2026-10-03
 
-MetronomePro now pins AICoreKit baseline `0d72ce0b` through `Packages/PracticeCoachAI`.
+MetronomePro now pins an AICoreKit stabilization revision that includes shared response-completion validation and local-model provisioning through `Packages/PracticeCoachAI`.
 
 The production boundary remains deliberately small:
 
@@ -229,8 +237,8 @@ The production boundary remains deliberately small:
 Provider behavior is now:
 
 - Practice Coach exposes explicit **Automatic / On-device / Cloud** execution modes through the shared SettingsFeature used by both MetronomePro and Metronome26;
-- Automatic registers Apple Foundation Models plus an enabled/configured remote provider and requests `.localFirst`;
-- On-device registers Apple Foundation Models only and requests `.localOnly`;
+- Automatic registers the available local providers (Apple Foundation Models plus the optional provisioned Qwen/Core AI provider) and may add an enabled/configured remote provider, then requests `.localFirst`;
+- On-device registers the available local providers (Apple plus optional Qwen/Core AI) and requests `.localOnly`;
 - Cloud registers the configured remote provider only and requests `.remoteOnly`; a missing/invalid cloud configuration does not silently fall back to Apple;
 - each generated review resolves the current configured service, so mode/provider changes apply without restarting the app or recreating the session screen;
 - remote providers are constructed through `AIProviderConfiguration`;
@@ -261,6 +269,8 @@ Do not count MetronomePro as an AICoreKit production consumer until:
 - insufficient timing evidence remains insufficient rather than becoming a negative judgment;
 - evidence references survive structured-response validation;
 - cancellation and provider-unavailable paths degrade cleanly;
+- if Qwen/Core AI is part of the claimed feature, the real model resource has been provisioned with the documented wrapper and resolves from the shared `PracticeCoachAI` package bundle;
+- a signed supported device has executed a real Qwen Practice Coach generation; a no-model CI/device build does not satisfy this gate;
 - relevant localization is verified;
 - CI and production archive succeed.
 
