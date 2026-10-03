@@ -15,6 +15,16 @@ Until `1.0.0`:
 
 No `1.0.0` tag should be created until the remaining production-validation and migration gates in the roadmap are satisfied.
 
+### Pre-1.0 stabilization freeze
+
+The default mode before 1.0 is stabilization, not speculative expansion.
+
+- Prefer production-consumer evidence, bug fixes, tests, documentation, compatibility work, and reliability improvements.
+- Add a new public abstraction only when a real consumer has a concrete product-neutral need that the current contracts cannot express cleanly.
+- Do not move product prompts, repair policy, domain schemas, localized UX, or business truth into AICoreKit merely to reduce code in one application.
+- When ColorCamera, MetronomePro, FateAtlas, or another consumer exposes a reusable issue, first prove that the issue is provider/runtime-wide before promoting it into the shared package.
+- Keep exact-revision pins in production consumers until the 1.0 compatibility contract is published.
+
 ## Starting with 1.0
 
 For `1.x` releases:
