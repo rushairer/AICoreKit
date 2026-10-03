@@ -4237,11 +4237,23 @@ extension AICoreKitTests {
 private actor SlowNonCancellingCoreAILifecycleBridge:
     CoreAIModelLifecycleBridge
 {
+    private let blocksPreparation:
+        Bool
+    private var preparationContinuation:
+        CheckedContinuation<Void, Never>?
     private var prepared = false
     private(set) var prepareCount = 0
     private(set) var loadCount = 0
     private(set) var unloadCount = 0
     private(set) var clearCount = 0
+
+    init(
+        blocksPreparation:
+            Bool = false
+    ) {
+        self.blocksPreparation =
+            blocksPreparation
+    }
 
     func availability() async -> AIAvailability {
         .available
@@ -4269,12 +4281,28 @@ private actor SlowNonCancellingCoreAILifecycleBridge:
 
         // Intentionally ignore cancellation to model a bridge operation
         // whose native callback arrives after reset was requested.
-        try? await Task.sleep(
-            nanoseconds: 80_000_000
-        )
+        if blocksPreparation {
+            await withCheckedContinuation {
+                continuation in
+
+                preparationContinuation =
+                    continuation
+            }
+        } else {
+            try? await Task.sleep(
+                nanoseconds: 80_000_000
+            )
+        }
 
         prepared = true
         return .success
+    }
+
+    func releasePreparation() {
+        let continuation =
+            preparationContinuation
+        preparationContinuation = nil
+        continuation?.resume()
     }
 
     func load(
@@ -4423,7 +4451,10 @@ extension AICoreKitTests {
         }
 
         let bridge =
-            SlowNonCancellingCoreAILifecycleBridge()
+            SlowNonCancellingCoreAILifecycleBridge(
+                blocksPreparation:
+                    true
+            )
         let controller =
             CoreAIModelLifecycleController(
                 bridge: bridge,
@@ -4483,6 +4514,9 @@ extension AICoreKitTests {
                 .cancelled
             )
         }
+
+        await bridge
+            .releasePreparation()
 
         try await clearing.value
 
@@ -5673,14 +5707,14 @@ private actor CapturingStructuredCoreAIBridge:
         return CoreAIBridgeInvocation(
             status: .success,
             responseJSON:
-                """
+                #"""
                 {
                   "text": "{\"name\":\"Forest Study\",\"roles\":[{\"colorIndex\":0,\"role\":\"primary\"}]}",
                   "finishReason": "completed",
                   "inputTokens": 12,
                   "outputTokens": 8
                 }
-                """
+                """#
         )
     }
 
