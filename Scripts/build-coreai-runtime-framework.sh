@@ -64,7 +64,18 @@ rm -rf "$DERIVED_DATA"
 
 (
   cd "$RUNTIME_DIR"
-  xcodebuild -scheme "$FRAMEWORK_NAME" -configuration "$CONFIGURATION_NAME" -destination "$DESTINATION" -sdk "$SDK" -derivedDataPath "$DERIVED_DATA" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+  xcodebuild \
+    -scheme "$FRAMEWORK_NAME" \
+    -configuration "$CONFIGURATION_NAME" \
+    -destination "$DESTINATION" \
+    -sdk "$SDK" \
+    -derivedDataPath "$DERIVED_DATA" \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    ENABLE_PREVIEWS=NO \
+    ENABLE_DEBUG_DYLIB=NO \
+    COMPILER_INDEX_STORE_ENABLE=NO \
+    build
 )
 
 BUILT_FRAMEWORK="$DERIVED_DATA/Build/Products/${CONFIGURATION_NAME}-${PRODUCTS_SUFFIX}/PackageFrameworks/$FRAMEWORK_NAME.framework"
