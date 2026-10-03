@@ -239,10 +239,12 @@ final class AIProviderConfigurationTests:
             )
         )
 
+        let capturedRequest =
+            await transport
+            .capturedRequest()
         let request =
             try XCTUnwrap(
-                await transport
-                    .capturedRequest()
+                capturedRequest
             )
 
         XCTAssertEqual(
