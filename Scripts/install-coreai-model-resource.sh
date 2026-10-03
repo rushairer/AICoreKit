@@ -15,15 +15,21 @@ fail() {
 }
 
 [ -d "$SOURCE_DIR" ] || fail "model source missing: $SOURCE_DIR"
-find "$SOURCE_DIR" -name '*.aimodel' -print | grep -q .   || fail "no .aimodel found in $SOURCE_DIR"
+find "$SOURCE_DIR" -name '*.aimodel' -print | grep -q . \
+  || fail "no .aimodel found in $SOURCE_DIR"
 
 mkdir -p "$DEST_DIR"
 
-find "$DEST_DIR" -mindepth 1 \
-  ! -name '.gitkeep' \
-  ! -name '.gitignore' \
-  ! -name 'README.md' \
-  -exec rm -rf {} +
+PRESERVE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/aicorekit-model-sentinels.XXXXXX")
+trap 'rm -rf "$PRESERVE_DIR"' EXIT HUP INT TERM
+
+for name in .gitkeep .gitignore README.md; do
+  if [ -f "$DEST_DIR/$name" ]; then
+    cp "$DEST_DIR/$name" "$PRESERVE_DIR/$name"
+  fi
+done
+
+find "$DEST_DIR" -mindepth 1 -exec rm -rf {} +
 
 (
   cd "$SOURCE_DIR"
@@ -33,7 +39,14 @@ find "$DEST_DIR" -mindepth 1 \
   tar -xf -
 )
 
-find "$DEST_DIR" -name '*.aimodel' -print | grep -q .   || fail "model copy failed: $DEST_DIR"
+for name in .gitkeep .gitignore README.md; do
+  if [ -f "$PRESERVE_DIR/$name" ]; then
+    cp "$PRESERVE_DIR/$name" "$DEST_DIR/$name"
+  fi
+done
+
+find "$DEST_DIR" -name '*.aimodel' -print | grep -q . \
+  || fail "model copy failed: $DEST_DIR"
 
 echo "Installed Core AI model resource:"
 echo "$DEST_DIR"
