@@ -1,6 +1,7 @@
 import AICore
 import AIOrchestration
 import AIProviderCoreAI
+import AIProviderCoreAIWeakLink
 import AITools
 import Foundation
 import XCTest
@@ -52,6 +53,19 @@ private struct StubCoreAIBridge: CoreAIBridge {
 }
 
 final class AICoreKitTests: XCTestCase {
+    func testWeakLinkedCoreAIBridgeHasNoRequiredRuntimeSymbol() async {
+        let bridge =
+            WeakLinkedCoreAIBridge()
+        let availability =
+            await bridge.availability()
+
+        if case .available = availability {
+            XCTFail(
+                "Root tests should not have the optional Core AI runtime loaded."
+            )
+        }
+    }
+
     func testCapabilitiesSatisfyRequiredSet() {
         let capabilities: AICapabilities = [.textGeneration, .localExecution]
         XCTAssertTrue(capabilities.satisfies([.textGeneration]))
