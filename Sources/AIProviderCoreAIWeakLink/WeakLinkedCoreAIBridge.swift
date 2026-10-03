@@ -1,5 +1,6 @@
 import AICore
 import AIProviderCoreAI
+import Foundation
 
 public struct WeakLinkedCoreAIBridge:
     CoreAIModelLifecycleBridge
@@ -22,8 +23,17 @@ public struct WeakLinkedCoreAIBridge:
             "AICKCoreAIUnload",
         clearPreparationCacheSymbol:
             String =
-            "AICKCoreAIClearPreparationCache"
+            "AICKCoreAIClearPreparationCache",
+        runtimeFrameworkName:
+            String =
+            "AICoreKitCoreAIRuntime"
     ) {
+        let runtimeExecutablePath =
+            Self.runtimeExecutablePath(
+                frameworkName:
+                    runtimeFrameworkName
+            )
+
         dynamicBridge =
             WeakSymbolCoreAIBridge(
                 availabilitySymbol:
@@ -39,8 +49,44 @@ public struct WeakLinkedCoreAIBridge:
                 unloadSymbol:
                     unloadSymbol,
                 clearPreparationCacheSymbol:
-                    clearPreparationCacheSymbol
+                    clearPreparationCacheSymbol,
+                runtimeLibraryPath:
+                    runtimeExecutablePath
             )
+    }
+
+    private static func runtimeExecutablePath(
+        frameworkName: String
+    ) -> String? {
+        guard
+            let frameworksURL =
+                Bundle.main
+                .privateFrameworksURL
+        else {
+            return nil
+        }
+
+        let executableURL =
+            frameworksURL
+            .appendingPathComponent(
+                "\(frameworkName).framework",
+                isDirectory:
+                    true
+            )
+            .appendingPathComponent(
+                frameworkName,
+                isDirectory:
+                    false
+            )
+
+        return
+            FileManager.default
+            .fileExists(
+                atPath:
+                    executableURL.path
+            )
+            ? executableURL.path
+            : nil
     }
 
     public func availability()
