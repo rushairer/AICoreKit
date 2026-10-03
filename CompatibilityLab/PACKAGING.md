@@ -32,7 +32,7 @@ The lower-minimum host must not import the `AICoreKitCoreAIRuntime` Swift module
 
 A pure `dlsym` implementation does not create a link-time reference to the runtime framework. When dead stripping of unused dynamic libraries is enabled, the final host binary can lose the weak framework load command entirely.
 
-`AICoreWeakBridgeShim` therefore carries one deliberately tiny weak import of `AICKCoreAIIsAvailable`. It is packaged only through the optional `AIProviderCoreAIWeakLink` product, so ordinary AICoreKit users do not inherit a Core AI link requirement. Apps embedding the runtime use `WeakLinkedCoreAIBridge`, which combines this link-time keepalive with the dynamic C ABI bridge.
+`AICoreWeakBridgeShim` carries one deliberately tiny weak import of `AICKCoreAIIsAvailable` for CompatibilityLab packaging tests only. Product consumers do not depend on this shim. `AIProviderCoreAIWeakLink` uses `WeakLinkedCoreAIBridge`, which resolves the shared `AICKCoreAI*` ABI dynamically through `dlsym`; therefore extensions and other transitive consumers do not inherit an undefined Core AI runtime symbol. Host app targets that embed the runtime still declare the final weak framework load in their own Mach-O packaging configuration.
 
 Generation and lifecycle operations still resolve through the stable C ABI.
 
