@@ -520,31 +520,81 @@ private actor CoreAIRuntime {
                 separator: "\n\n"
             )
 
+        let options =
+            GenerationOptions(
+                temperature:
+                    request
+                    .temperature
+                    .map {
+                        min(
+                            max(
+                                $0,
+                                0
+                            ),
+                            1
+                        )
+                    },
+                maximumResponseTokens:
+                    request
+                    .maxOutputTokens
+            )
+        let effectivePrompt =
+            prompt.isEmpty
+            ? "User: Hello"
+            : prompt
+
         do {
+            if
+                let structuredSchema =
+                    request
+                    .structuredSchema
+            {
+                let schema =
+                    try CoreAIStructuredSchemaCompiler
+                    .compile(
+                        schemaJSON:
+                            structuredSchema
+                            .schemaJSON,
+                        name:
+                            structuredSchema
+                            .name,
+                        description:
+                            structuredSchema
+                            .description,
+                        strict:
+                            structuredSchema
+                            .strict
+                    )
+
+                let response =
+                    try await session
+                    .respond(
+                        to:
+                            effectivePrompt,
+                        schema:
+                            schema,
+                        options:
+                            options
+                    )
+
+                return RuntimeResponse(
+                    text:
+                        response
+                        .content
+                        .jsonString,
+                    finishReason:
+                        "completed",
+                    inputTokens: nil,
+                    outputTokens: nil
+                )
+            }
+
             let response =
                 try await session.respond(
                     to:
-                        prompt.isEmpty
-                        ? "User: Hello"
-                        : prompt,
+                        effectivePrompt,
                     options:
-                        GenerationOptions(
-                            temperature:
-                                request
-                                .temperature
-                                .map {
-                                    min(
-                                        max(
-                                            $0,
-                                            0
-                                        ),
-                                        1
-                                    )
-                                },
-                            maximumResponseTokens:
-                                request
-                                .maxOutputTokens
-                        )
+                        options
                 )
 
             return RuntimeResponse(
@@ -558,6 +608,9 @@ private actor CoreAIRuntime {
         } catch is CancellationError {
             throw RuntimeFailure
                 .cancelled
+        } catch is RuntimeStructuredSchemaError {
+            throw RuntimeFailure
+                .invalidRequest
         } catch {
             throw RuntimeFailure
                 .generationFailed
@@ -728,6 +781,18 @@ private struct RuntimeRequest:
         Double?
     let metadata:
         [String: String]
+    let structuredSchema:
+        RuntimeStructuredSchema?
+}
+
+private struct RuntimeStructuredSchema:
+    Decodable,
+    Sendable
+{
+    let name: String
+    let description: String?
+    let schemaJSON: String
+    let strict: Bool
 }
 
 private struct RuntimeMessage:
