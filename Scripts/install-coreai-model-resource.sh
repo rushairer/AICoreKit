@@ -19,7 +19,11 @@ find "$SOURCE_DIR" -name '*.aimodel' -print | grep -q .   || fail "no .aimodel f
 
 mkdir -p "$DEST_DIR"
 
-find "$DEST_DIR" -mindepth 1 ! -name '.gitkeep' -exec rm -rf {} +
+find "$DEST_DIR" -mindepth 1 \
+  ! -name '.gitkeep' \
+  ! -name '.gitignore' \
+  ! -name 'README.md' \
+  -exec rm -rf {} +
 
 (
   cd "$SOURCE_DIR"
@@ -33,3 +37,4 @@ find "$DEST_DIR" -name '*.aimodel' -print | grep -q .   || fail "model copy fail
 
 echo "Installed Core AI model resource:"
 echo "$DEST_DIR"
+echo "Preserved host sentinels when present: .gitkeep, .gitignore, README.md"
